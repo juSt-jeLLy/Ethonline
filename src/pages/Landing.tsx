@@ -1,11 +1,26 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Users, Shield, Wallet } from "lucide-react";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useAccount } from "wagmi";
+import { useEffect } from "react";
 
 const Landing = () => {
   const navigate = useNavigate();
+  const { isConnected } = useAccount();
+
+  const handleEmployeeClick = () => {
+    if (isConnected) {
+      navigate("/employee/home");
+    }
+  };
+
+  const handleAdminClick = () => {
+    if (isConnected) {
+      navigate("/admin/home");
+    }
+  };
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -56,6 +71,11 @@ const Landing = () => {
         />
       </div>
 
+      {/* Wallet Connection in Top Right */}
+      <div className="absolute top-6 right-6 z-20">
+        <ConnectButton />
+      </div>
+
       <div className="relative z-10 container mx-auto px-6 py-20">
         <motion.div
           variants={containerVariants}
@@ -73,10 +93,10 @@ const Landing = () => {
             >
               <Wallet className="h-20 w-20 text-primary mx-auto animate-float" />
             </motion.div>
-            <h1 className="text-6xl font-bold gradient-text">
+            <h1 className="text-6xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
               PayStream Web3
             </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
               The future of decentralized payroll management. Secure, transparent, and efficient.
             </p>
           </motion.div>
@@ -87,58 +107,72 @@ const Landing = () => {
             className="grid md:grid-cols-2 gap-8 mt-16"
           >
             {/* Employee Card */}
-            <motion.div whileHover={{ scale: 1.03 }} className="h-full">
-              <Card className="glass-card p-8 h-full hover-lift cursor-pointer group" onClick={() => navigate("/employee/profile")}>
-                <div className="space-y-6">
-                  <motion.div
-                    whileHover={{ rotate: 360 }}
-                    transition={{ duration: 0.5 }}
-                    className="inline-block"
+            <ConnectButton.Custom>
+              {({ openConnectModal }) => (
+                <motion.div whileHover={{ scale: 1.03 }} className="h-full">
+                  <Card 
+                    className="glass-card p-8 h-full hover-lift cursor-pointer group" 
+                    onClick={isConnected ? handleEmployeeClick : openConnectModal}
                   >
-                    <Users className="h-16 w-16 text-primary" />
-                  </motion.div>
-                  <div>
-                    <h2 className="text-3xl font-bold mb-3">Employee</h2>
-                    <p className="text-muted-foreground mb-6">
-                      Manage your profile, view employment status, and track your payments
-                    </p>
-                  </div>
-                  <Button
-                    size="lg"
-                    className="w-full bg-gradient-to-r from-primary to-blue-500 hover:opacity-90 transition-opacity"
-                  >
-                    Connect Wallet
-                  </Button>
-                </div>
-              </Card>
-            </motion.div>
+                    <div className="space-y-6">
+                      <motion.div
+                        whileHover={{ rotate: 360 }}
+                        transition={{ duration: 0.5 }}
+                        className="inline-block"
+                      >
+                        <Users className="h-16 w-16 text-primary" />
+                      </motion.div>
+                      <div>
+                        <h2 className="text-3xl font-bold mb-3 text-gray-900">Employee</h2>
+                        <p className="text-gray-600 mb-6">
+                          Manage your profile, view employment status, and track your payments
+                        </p>
+                      </div>
+                      <button
+                        className="w-full px-6 py-3 bg-gradient-to-r from-primary to-blue-500 text-white rounded-lg font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+                      >
+                        <Wallet className="h-4 w-4" />
+                        {isConnected ? "Enter Dashboard" : "Connect Wallet"}
+                      </button>
+                    </div>
+                  </Card>
+                </motion.div>
+              )}
+            </ConnectButton.Custom>
 
             {/* Admin Card */}
-            <motion.div whileHover={{ scale: 1.03 }} className="h-full">
-              <Card className="glass-card p-8 h-full hover-lift cursor-pointer group" onClick={() => navigate("/admin/create-group")}>
-                <div className="space-y-6">
-                  <motion.div
-                    whileHover={{ rotate: 360 }}
-                    transition={{ duration: 0.5 }}
-                    className="inline-block"
+            <ConnectButton.Custom>
+              {({ openConnectModal }) => (
+                <motion.div whileHover={{ scale: 1.03 }} className="h-full">
+                  <Card 
+                    className="glass-card p-8 h-full hover-lift cursor-pointer group" 
+                    onClick={isConnected ? handleAdminClick : openConnectModal}
                   >
-                    <Shield className="h-16 w-16 text-primary" />
-                  </motion.div>
-                  <div>
-                    <h2 className="text-3xl font-bold mb-3">Admin</h2>
-                    <p className="text-muted-foreground mb-6">
-                      Create groups, manage employees, and process payments seamlessly
-                    </p>
-                  </div>
-                  <Button
-                    size="lg"
-                    className="w-full bg-gradient-to-r from-primary to-cyan-500 hover:opacity-90 transition-opacity"
-                  >
-                    Admin Login
-                  </Button>
-                </div>
-              </Card>
-            </motion.div>
+                    <div className="space-y-6">
+                      <motion.div
+                        whileHover={{ rotate: 360 }}
+                        transition={{ duration: 0.5 }}
+                        className="inline-block"
+                      >
+                        <Shield className="h-16 w-16 text-primary" />
+                      </motion.div>
+                      <div>
+                        <h2 className="text-3xl font-bold mb-3 text-gray-900">Admin</h2>
+                        <p className="text-gray-600 mb-6">
+                          Create groups, manage employees, and process payments seamlessly
+                        </p>
+                      </div>
+                      <button
+                        className="w-full px-6 py-3 bg-gradient-to-r from-primary to-cyan-500 text-white rounded-lg font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+                      >
+                        <Wallet className="h-4 w-4" />
+                        {isConnected ? "Enter Dashboard" : "Connect Wallet"}
+                      </button>
+                    </div>
+                  </Card>
+                </motion.div>
+              )}
+            </ConnectButton.Custom>
           </motion.div>
 
           {/* Features */}
@@ -154,8 +188,8 @@ const Landing = () => {
                 className="glass-card p-6 text-center"
               >
                 <feature.icon className="h-8 w-8 text-primary mx-auto mb-3" />
-                <h3 className="font-semibold mb-2">{feature.title}</h3>
-                <p className="text-sm text-muted-foreground">{feature.desc}</p>
+                <h3 className="font-semibold mb-2 text-gray-900">{feature.title}</h3>
+                <p className="text-sm text-gray-600">{feature.desc}</p>
               </motion.div>
             ))}
           </motion.div>

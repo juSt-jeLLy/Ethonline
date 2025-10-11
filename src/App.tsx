@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Web3Provider from "@/providers/Web3Provider";
+import { WalletGuard } from "@/components/WalletGuard";
 import Landing from "./pages/Landing";
 import EmployeeHome from "./pages/employee/Home";
 import EmployeeProfile from "./pages/employee/Profile";
@@ -26,14 +27,75 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Landing />} />
-            <Route path="/employee/home" element={<EmployeeHome />} />
-            <Route path="/employee/employment" element={<Employment />} />
-            <Route path="/employee/profile" element={<EmployeeProfile />} />
-            <Route path="/admin/home" element={<AdminHome />} />
-            <Route path="/admin/create-group" element={<CreateGroup />} />
-            <Route path="/admin/groups" element={<Groups />} />
-            <Route path="/admin/edit-group/:id" element={<EditGroup />} />
-            <Route path="/admin/profile" element={<AdminProfile />} />
+            
+            {/* Employee Routes - Protected */}
+            <Route 
+              path="/employee/home" 
+              element={
+                <WalletGuard>
+                  <EmployeeHome />
+                </WalletGuard>
+              } 
+            />
+            <Route 
+              path="/employee/employment" 
+              element={
+                <WalletGuard>
+                  <Employment />
+                </WalletGuard>
+              } 
+            />
+            <Route 
+              path="/employee/profile" 
+              element={
+                <WalletGuard>
+                  <EmployeeProfile />
+                </WalletGuard>
+              } 
+            />
+            
+            {/* Admin Routes - Protected */}
+            <Route 
+              path="/admin/home" 
+              element={
+                <WalletGuard>
+                  <AdminHome />
+                </WalletGuard>
+              } 
+            />
+            <Route 
+              path="/admin/create-group" 
+              element={
+                <WalletGuard>
+                  <CreateGroup />
+                </WalletGuard>
+              } 
+            />
+            <Route 
+              path="/admin/groups" 
+              element={
+                <WalletGuard>
+                  <Groups />
+                </WalletGuard>
+              } 
+            />
+            <Route 
+              path="/admin/edit-group/:id" 
+              element={
+                <WalletGuard>
+                  <EditGroup />
+                </WalletGuard>
+              } 
+            />
+            <Route 
+              path="/admin/profile" 
+              element={
+                <WalletGuard>
+                  <AdminProfile />
+                </WalletGuard>
+              } 
+            />
+            
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
