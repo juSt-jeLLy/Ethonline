@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Web3Provider from "@/providers/Web3Provider";
 import Landing from "./pages/Landing";
 import EmployeeHome from "./pages/employee/Home";
 import EmployeeProfile from "./pages/employee/Profile";
@@ -18,24 +19,26 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/employee/home" element={<EmployeeHome />} />
-          <Route path="/employee/employment" element={<Employment />} />
-          <Route path="/employee/profile" element={<EmployeeProfile />} />
-          <Route path="/admin/home" element={<AdminHome />} />
-          <Route path="/admin/create-group" element={<CreateGroup />} />
-          <Route path="/admin/groups" element={<Groups />} />
-          <Route path="/admin/edit-group/:id" element={<EditGroup />} />
-          <Route path="/admin/profile" element={<AdminProfile />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <Web3Provider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/employee/home" element={<EmployeeHome />} />
+            <Route path="/employee/employment" element={<Employment />} />
+            <Route path="/employee/profile" element={<EmployeeProfile />} />
+            <Route path="/admin/home" element={<AdminHome />} />
+            <Route path="/admin/create-group" element={<CreateGroup />} />
+            <Route path="/admin/groups" element={<Groups />} />
+            <Route path="/admin/edit-group/:id" element={<EditGroup />} />
+            <Route path="/admin/profile" element={<AdminProfile />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </Web3Provider>
   </QueryClientProvider>
 );
 
