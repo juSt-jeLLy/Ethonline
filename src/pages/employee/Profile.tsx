@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/card";
@@ -6,27 +6,98 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Save, Wallet, User, DollarSign } from "lucide-react";
+import { Save, Wallet, User, DollarSign, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ProfileService } from "@/lib/profileService";
 
 const Profile = () => {
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [profileData, setProfileData] = useState({
-    name: "",
+    first_name: "",
+    last_name: "",
+    email: "",
     walletAddress: "",
     chain: "",
     token: "",
   });
   const [isSaved, setIsSaved] = useState(false);
 
-  const handleSave = () => {
-    setIsSaved(true);
-    setIsEditing(false);
-    toast({
-      title: "Profile Updated",
-      description: "Your payment preferences have been saved successfully.",
-    });
+  // Mock user ID - in a real app, this would come from authentication
+  // For demo purposes, using a fixed ID that could exist in your database
+  const userId = "55555555-eeee-4444-aaaa-999999999999"; // Fixed UUID for demo
+
+  // Load existing profile data on component mount
+  useEffect(() => {
+    const loadProfile = async () => {
+      setIsLoading(true);
+      console.log('Loading profile for user ID:', userId);
+      
+      const result = await ProfileService.getEmployeeProfileWithWallet(userId);
+      console.log('Profile load result:', result);
+      
+      if (result.success && result.data) {
+        const { employee, employment } = result.data;
+        if (employee) {
+          setProfileData({
+            first_name: employee.first_name || "",
+            last_name: employee.last_name || "",
+            email: employee.email || "",
+            walletAddress: employment?.wallet_address || "",
+            chain: employment?.wallet_chain || "",
+            token: employment?.wallet_token || "",
+          });
+          setIsSaved(true);
+        }
+      } else {
+        console.log('No existing profile found, starting with empty form');
+        // Supabase will handle creating the user when they save
+      }
+      setIsLoading(false);
+    };
+
+    loadProfile();
+  }, [userId]);
+
+
+  const handleSave = async () => {
+    setIsLoading(true);
+    console.log('Saving profile data:', profileData);
+    
+    try {
+      const result = await ProfileService.saveEmployeeProfile({
+        first_name: profileData.first_name,
+        last_name: profileData.last_name,
+        email: profileData.email,
+        wallet_address: profileData.walletAddress,
+        preferred_chain: profileData.chain,
+        preferred_token: profileData.token,
+        userId: userId,
+      });
+
+      console.log('Save result:', result);
+
+      if (result.success) {
+        setIsSaved(true);
+        setIsEditing(false);
+        toast({
+          title: "Profile Updated",
+          description: "Your payment preferences have been saved successfully.",
+        });
+      } else {
+        throw new Error(result.error || "Failed to save profile");
+      }
+    } catch (error) {
+      console.error('Save error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save your profile. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const containerVariants = {
@@ -55,6 +126,7 @@ const Profile = () => {
           <div className="space-y-2">
             <h1 className="text-4xl font-bold gradient-text">Payment Profile</h1>
             <p className="text-muted-foreground">Your payment preferences and information</p>
+            
           </div>
 
           {/* Profile Summary Card - Shows when saved */}
@@ -72,7 +144,7 @@ const Profile = () => {
                     <div className="space-y-3 flex-1">
                       <div>
                         <p className="text-sm text-muted-foreground mb-1">Name</p>
-                        <p className="text-lg font-semibold">{profileData.name || "Not set"}</p>
+                        <p className="text-lg font-semibold">{`${profileData.first_name} ${profileData.last_name}`.trim() || "Not set"}</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground mb-1">Wallet Address</p>
@@ -111,16 +183,46 @@ const Profile = () => {
           >
             <Card className="glass-card p-8 hover-lift">
               <div className="space-y-6">
+                <motion.div variants={itemVariants} className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="first_name" className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-primary" />
+                      First Name
+                    </Label>
+                    <Input
+                      id="first_name"
+                      placeholder="Enter your first name"
+                      value={profileData.first_name}
+                      onChange={(e) => setProfileData({ ...profileData, first_name: e.target.value })}
+                      className="glass-card border-white/20"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="last_name" className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-primary" />
+                      Last Name
+                    </Label>
+                    <Input
+                      id="last_name"
+                      placeholder="Enter your last name"
+                      value={profileData.last_name}
+                      onChange={(e) => setProfileData({ ...profileData, last_name: e.target.value })}
+                      className="glass-card border-white/20"
+                    />
+                  </div>
+                </motion.div>
+
                 <motion.div variants={itemVariants} className="space-y-2">
-                  <Label htmlFor="name" className="flex items-center gap-2">
+                  <Label htmlFor="email" className="flex items-center gap-2">
                     <User className="h-4 w-4 text-primary" />
-                    Full Name
+                    Email Address
                   </Label>
                   <Input
-                    id="name"
-                    placeholder="Enter your full name"
-                    value={profileData.name}
-                    onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
+                    id="email"
+                    type="email"
+                    placeholder="Enter your email"
+                    value={profileData.email}
+                    onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
                     className="glass-card border-white/20"
                   />
                 </motion.div>
@@ -181,11 +283,16 @@ const Profile = () => {
                 <motion.div variants={itemVariants} className="flex gap-3">
                   <Button
                     onClick={handleSave}
+                    disabled={isLoading}
                     size="lg"
-                    className="flex-1 bg-gradient-to-r from-primary to-blue-500 hover:opacity-90 transition-opacity"
+                    className="flex-1 bg-gradient-to-r from-primary to-blue-500 hover:opacity-90 transition-opacity disabled:opacity-50"
                   >
-                    <Save className="mr-2 h-4 w-4" />
-                    Save Profile
+                    {isLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-4 w-4" />
+                    )}
+                    {isLoading ? "Saving..." : "Save Profile"}
                   </Button>
                   {isEditing && (
                     <Button

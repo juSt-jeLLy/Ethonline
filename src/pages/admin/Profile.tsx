@@ -1,27 +1,71 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Save, User, Mail, Building } from "lucide-react";
+import { Save, User, Mail, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ProfileService } from "@/lib/profileService";
 
 const Profile = () => {
   const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
   const [profileData, setProfileData] = useState({
     name: "",
     email: "",
-    company: "",
-    walletAddress: "",
   });
 
-  const handleSave = () => {
-    toast({
-      title: "Profile Updated",
-      description: "Your admin profile has been saved successfully.",
-    });
+  // Mock user ID - in a real app, this would come from authentication
+  // For demo purposes, using a fixed ID that could exist in your database
+  const userId = "55555555-eeee-4444-aaaa-999999999999"; // Fixed UUID for demo
+
+  // Load existing profile data on component mount
+  useEffect(() => {
+    const loadProfile = async () => {
+      setIsLoading(true);
+      const result = await ProfileService.getEmployerProfile(userId);
+      
+      if (result.success && result.data) {
+        setProfileData({
+          name: result.data.name || "",
+          email: result.data.email || "",
+        });
+      }
+      setIsLoading(false);
+    };
+
+    loadProfile();
+  }, [userId]);
+
+  const handleSave = async () => {
+    setIsLoading(true);
+    
+    try {
+      const result = await ProfileService.saveEmployerProfile({
+        name: profileData.name,
+        email: profileData.email,
+        userId: userId,
+      });
+
+      if (result.success) {
+        toast({
+          title: "Profile Updated",
+          description: "Your admin profile has been saved successfully.",
+        });
+      } else {
+        throw new Error(result.error || "Failed to save profile");
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save your profile. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const containerVariants = {
@@ -88,28 +132,20 @@ const Profile = () => {
                   />
                 </motion.div>
 
-                <motion.div variants={itemVariants} className="space-y-2">
-                  <Label htmlFor="company" className="flex items-center gap-2">
-                    <Building className="h-4 w-4 text-primary" />
-                    Company Name
-                  </Label>
-                  <Input
-                    id="company"
-                    placeholder="Your company name"
-                    value={profileData.company}
-                    onChange={(e) => setProfileData({ ...profileData, company: e.target.value })}
-                    className="glass-card border-white/20"
-                  />
-                </motion.div>
 
                 <motion.div variants={itemVariants}>
                   <Button
                     onClick={handleSave}
+                    disabled={isLoading}
                     size="lg"
-                    className="w-full bg-gradient-to-r from-primary to-blue-500 hover:opacity-90 transition-opacity"
+                    className="w-full bg-gradient-to-r from-primary to-blue-500 hover:opacity-90 transition-opacity disabled:opacity-50"
                   >
-                    <Save className="mr-2 h-4 w-4" />
-                    Save Profile
+                    {isLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-4 w-4" />
+                    )}
+                    {isLoading ? "Saving..." : "Save Profile"}
                   </Button>
                 </motion.div>
               </div>
