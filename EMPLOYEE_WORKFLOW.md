@@ -30,7 +30,7 @@ await ProfileService.addEmployeeToCompany(
   "employee-123", // Employee ID
   {
     role: "Developer",
-    base_salary_atomic: 5000000000000000000, // 5 ETH in wei
+    payment_amount: 5000000000000000000, // 5 ETH in wei
     chain: "ethereum",
     token: "usdc"
   }

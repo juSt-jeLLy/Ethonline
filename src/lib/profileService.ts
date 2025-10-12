@@ -497,8 +497,8 @@ export class ProfileService {
   // Admin adds employee to company (creates employment relationship)
   static async addEmployeeToCompany(employerId: string, employeeId: string, employmentData: {
     role?: string
-    base_salary_atomic?: number
-    hourly_rate_atomic?: number
+    payment_amount?: number
+    payment_frequency?: number
     chain?: string
     token?: string
     token_contract?: string
@@ -513,8 +513,8 @@ export class ProfileService {
           employee_id: employeeId,
           status: 'active',
           role: employmentData.role,
-          base_salary_atomic: employmentData.base_salary_atomic,
-          hourly_rate_atomic: employmentData.hourly_rate_atomic,
+          payment_amount: employmentData.payment_amount,
+          payment_frequency: employmentData.payment_frequency,
           chain: employmentData.chain,
           token: employmentData.token,
           token_contract: employmentData.token_contract,
@@ -811,8 +811,8 @@ export class ProfileService {
           employee_id: employeeId,
           status: 'active',
           role: 'employee',
-          base_salary_atomic: 0, // TODO: Parse payment amount
-          hourly_rate_atomic: 0,
+          payment_amount: 0, // TODO: Parse payment amount
+          payment_frequency: 0,
           chain: employee.chain || 'ethereum',
           token: employee.token || 'usdc',
           token_contract: '',

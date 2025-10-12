@@ -33,8 +33,8 @@ export interface Employment {
   employee_id: string
   status: string
   role: string
-  base_salary_atomic?: number
-  hourly_rate_atomic?: number
+  payment_amount?: number
+  payment_frequency?: number
   chain?: string
   token?: string
   token_contract?: string

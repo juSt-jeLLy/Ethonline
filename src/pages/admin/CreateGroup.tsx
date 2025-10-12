@@ -428,7 +428,7 @@ const CreateGroup = () => {
                     className="glass-card border-white/20"
                   />
                   <Input
-                    placeholder="Payment (e.g., 200 USD)"
+                    placeholder="Payment (e.g., 200)"
                     value={newEmployee.payment}
                     onChange={(e) => setNewEmployee({ ...newEmployee, payment: e.target.value })}
                     className="glass-card border-white/20"
