@@ -9,9 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Save, Wallet, User, DollarSign, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ProfileService } from "@/lib/profileService";
+import { useAccount } from "wagmi";
 
 const Profile = () => {
   const { toast } = useToast();
+  const { address, isConnected } = useAccount();
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [profileData, setProfileData] = useState({
@@ -24,41 +26,69 @@ const Profile = () => {
   });
   const [isSaved, setIsSaved] = useState(false);
 
-  // Mock user ID - in a real app, this would come from authentication
-  // For demo purposes, using a fixed ID that could exist in your database
-  const userId = "55555555-eeee-4444-aaaa-999999999999"; // Fixed UUID for demo
-
   // Load existing profile data on component mount
   useEffect(() => {
     const loadProfile = async () => {
       setIsLoading(true);
-      console.log('Loading profile for user ID:', userId);
+      console.log('=== PROFILE LOAD DEBUG ===');
+      console.log('Web3 connection status:', { isConnected, address });
+      console.log('Current profileData state:', profileData);
       
-      const result = await ProfileService.getEmployeeProfileWithWallet(userId);
-      console.log('Profile load result:', result);
+      // Use the connected wallet address from Web3
+      const walletAddress = address || "";
+      console.log('Will search by wallet_address:', walletAddress);
+      console.log('Will search by email:', profileData.email);
+      
+      // Try to load existing profile data using connected wallet
+      const result = await ProfileService.loadEmployeeProfile({
+        wallet_address: walletAddress, // Use connected wallet address
+        email: profileData.email // Try with current email if any
+      });
+      
+      console.log('ProfileService.loadEmployeeProfile result:', result);
       
       if (result.success && result.data) {
-        const { employee, employment } = result.data;
+        const { employee, wallet, employeeId } = result.data;
+        console.log('Found employee data:', employee);
+        console.log('Found wallet data:', wallet);
+        console.log('Employee ID:', employeeId);
+        
         if (employee) {
-          setProfileData({
+          const newProfileData = {
             first_name: employee.first_name || "",
             last_name: employee.last_name || "",
             email: employee.email || "",
-            walletAddress: employment?.wallet_address || "",
-            chain: employment?.wallet_chain || "",
-            token: employment?.wallet_token || "",
-          });
+            walletAddress: wallet?.account_address || walletAddress, // Use connected wallet if no stored wallet
+            chain: wallet?.chain || "",
+            token: wallet?.token || "",
+          };
+          
+          console.log('Setting profile data to:', newProfileData);
+          setProfileData(newProfileData);
           setIsSaved(true);
+          console.log('✅ Loaded existing profile data');
+        } else {
+          console.log('❌ No employee data found in result');
         }
       } else {
-        console.log('No existing profile found, starting with empty form');
-        // Supabase will handle creating the user when they save
+        console.log('❌ No existing profile found - starting with empty form');
+        console.log('Error details:', result.error);
+        
+        // If no existing profile but wallet is connected, pre-fill wallet address
+        if (walletAddress) {
+          setProfileData(prev => ({
+            ...prev,
+            walletAddress: walletAddress
+          }));
+          console.log('✅ Pre-filled wallet address from Web3 connection');
+        }
       }
       setIsLoading(false);
+      console.log('=== END PROFILE LOAD DEBUG ===');
     };
 
     loadProfile();
-  }, [userId]);
+  }, [address, isConnected]); // Re-run when wallet connection changes
 
 
   const handleSave = async () => {
@@ -73,7 +103,6 @@ const Profile = () => {
         wallet_address: profileData.walletAddress,
         preferred_chain: profileData.chain,
         preferred_token: profileData.token,
-        userId: userId,
       });
 
       console.log('Save result:', result);
