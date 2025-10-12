@@ -734,6 +734,177 @@ export class ProfileService {
     }
   }
 
+  // Get specific payment group by employer ID
+  static async getPaymentGroupById(employerId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('employments')
+        .select(`
+          *,
+          employers!inner(
+            id,
+            name,
+            email
+          ),
+          employees!inner(
+            id,
+            first_name,
+            last_name,
+            email
+          ),
+          wallets(
+            id,
+            account_address,
+            chain,
+            token,
+            is_default
+          )
+        `)
+        .eq('employer_id', employerId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data || data.length === 0) {
+        return { success: false, error: 'Group not found', data: null };
+      }
+
+      // Get employer info from first record
+      const employer = data[0].employers;
+      
+      // Process employees with their wallet info
+      const employees = data.map(employment => {
+        const employee = employment.employees;
+        const wallet = employment.wallets?.[0]; // Get default wallet
+        
+        return {
+          id: employee.id,
+          first_name: employee.first_name,
+          last_name: employee.last_name,
+          email: employee.email || '',
+          wallet_address: wallet?.account_address || '',
+          chain: employment.chain || wallet?.chain || 'ethereum',
+          token: employment.token || wallet?.token || 'usdc',
+          payment_amount: employment.payment_amount || 0,
+          payment_frequency: employment.payment_frequency || 'monthly',
+          status: employment.status,
+          role: employment.role,
+          employment_id: employment.id
+        };
+      });
+
+      // Calculate total payment
+      const totalPayment = employees.reduce((sum, emp) => sum + (emp.payment_amount || 0), 0);
+
+      const groupData = {
+        id: employer.id,
+        name: employer.name,
+        email: employer.email,
+        employees: employees,
+        totalPayment: totalPayment,
+        status: 'Active', // Default status
+        created_at: data[0].created_at
+      };
+
+      return { success: true, data: groupData };
+    } catch (error) {
+      console.error('Error fetching payment group:', error);
+      return { success: false, error: error.message, data: null };
+    }
+  }
+
+  // Get all payment groups (employments) for a company
+  static async getPaymentGroups(employerId?: string) {
+    try {
+      let query = supabase
+        .from('employments')
+        .select(`
+          *,
+          employers!inner(
+            id,
+            name,
+            email
+          ),
+          employees!inner(
+            id,
+            first_name,
+            last_name,
+            email
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      // If employerId is provided, filter by that employer
+      if (employerId) {
+        query = query.eq('employer_id', employerId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw error;
+      }
+
+      // Group employments by employer to create "groups"
+      const groupsMap = new Map();
+      
+      data?.forEach(employment => {
+        const employerId = employment.employer_id;
+        const employerName = employment.employers.name;
+        
+        if (!groupsMap.has(employerId)) {
+          groupsMap.set(employerId, {
+            id: employerId,
+            name: employerName,
+            employer: employment.employers,
+            employees: [],
+            totalPayment: 0,
+            status: 'Active', // Default status
+            nextPayment: 'TBD', // Default next payment
+            created_at: employment.created_at
+          });
+        }
+        
+        const group = groupsMap.get(employerId);
+        group.employees.push({
+          id: employment.employee_id,
+          first_name: employment.employees.first_name,
+          last_name: employment.employees.last_name,
+          email: employment.employees.email,
+          payment_amount: employment.payment_amount,
+          payment_frequency: employment.payment_frequency,
+          chain: employment.chain,
+          token: employment.token,
+          status: employment.status,
+          role: employment.role
+        });
+        
+        // Sum up total payments
+        group.totalPayment += employment.payment_amount || 0;
+      });
+
+      // Convert map to array and format the data
+      const groups = Array.from(groupsMap.values()).map(group => ({
+        id: group.id,
+        name: group.name,
+        employer: group.employer,
+        employees: group.employees.length,
+        totalPayment: `${group.totalPayment.toLocaleString()} ${group.employees[0]?.token?.toUpperCase() || 'USDC'}`,
+        nextPayment: group.nextPayment,
+        status: group.status,
+        created_at: group.created_at,
+        employeeDetails: group.employees // Keep detailed employee info for potential use
+      }));
+
+      return { success: true, data: groups };
+    } catch (error) {
+      console.error('Error fetching payment groups:', error);
+      return { success: false, error: error.message, data: [] };
+    }
+  }
+
   // Create payment group (employment relationships)
   static async createPaymentGroup(groupData: {
     employerId: string;
@@ -758,11 +929,51 @@ export class ProfileService {
       for (const employee of groupData.employees) {
         console.log('Processing employee:', employee);
         
-        // Check if employee exists in database
-        let employeeId = employee.id;
+        let employeeId = null;
         
-        // If employee ID is a temp ID (starts with 'temp-'), we need to create the employee
-        if (employee.id.startsWith('temp-')) {
+        // Step 1: Check if wallet address exists in wallets table
+        if (employee.wallet_address && employee.wallet_address.trim() !== '') {
+          console.log('Checking if wallet address exists:', employee.wallet_address);
+          
+          const { data: existingWallet, error: walletError } = await supabase
+            .from('wallets')
+            .select('employee_id')
+            .eq('account_address', employee.wallet_address)
+            .maybeSingle();
+
+          if (walletError) {
+            console.error('Error checking wallet:', walletError);
+            throw walletError;
+          }
+
+          if (existingWallet) {
+            employeeId = existingWallet.employee_id;
+            console.log('Found existing employee by wallet address:', employeeId);
+          }
+        }
+        
+        // Step 2: If no wallet found, check if employee ID is a real ID (not temp)
+        if (!employeeId && !employee.id.startsWith('temp-')) {
+          console.log('Checking existing employee with ID:', employee.id);
+          const { data: existingEmployee, error: checkError } = await supabase
+            .from('employees')
+            .select('id, first_name, last_name, email')
+            .eq('id', employee.id)
+            .maybeSingle();
+
+          if (checkError) {
+            console.error('Error checking employee:', checkError);
+            throw checkError;
+          }
+
+          if (existingEmployee) {
+            employeeId = existingEmployee.id;
+            console.log('Found existing employee by ID:', employeeId);
+          }
+        }
+        
+        // Step 3: Only create new employee if we couldn't find an existing one
+        if (!employeeId) {
           console.log('Creating new employee:', employee.first_name, employee.last_name);
           
           // Create new employee (email is now optional)
@@ -782,27 +993,9 @@ export class ProfileService {
           }
           
           employeeId = newEmployee.id;
-          console.log('Created employee with ID:', employeeId);
+          console.log('Created new employee with ID:', employeeId);
         } else {
-          // Verify employee exists
-          console.log('Checking existing employee with ID:', employee.id);
-          const { data: existingEmployee, error: checkError } = await supabase
-            .from('employees')
-            .select('id, first_name, last_name, email')
-            .eq('id', employee.id)
-            .maybeSingle();
-
-          if (checkError) {
-            console.error('Error checking employee:', checkError);
-            throw checkError;
-          }
-
-          if (!existingEmployee) {
-            console.error('Employee not found:', employee.id);
-            throw new Error(`Employee with ID ${employee.id} not found`);
-          }
-          
-          console.log('Found existing employee:', existingEmployee);
+          console.log('Using existing employee with ID:', employeeId);
         }
 
         // Create employment record
@@ -846,11 +1039,11 @@ export class ProfileService {
         const employee = groupData.employees[i];
         const employment = employments[i];
         
-        if (employee.wallet_address) {
-          // Check if wallet exists for this employee
+        if (employee.wallet_address && employee.wallet_address.trim() !== '') {
+          // Check if wallet exists for this employee and address
           const { data: existingWallet, error: walletError } = await supabase
             .from('wallets')
-            .select('id')
+            .select('id, employment_id, chain, token')
             .eq('employee_id', employment.employee_id)
             .eq('account_address', employee.wallet_address)
             .maybeSingle();
@@ -861,16 +1054,20 @@ export class ProfileService {
           }
 
           if (existingWallet) {
-            // Update existing wallet to link to employment
+            // Update existing wallet to link to employment and update preferences
             const { error: updateError } = await supabase
               .from('wallets')
-              .update({ employment_id: employment.id })
+              .update({ 
+                employment_id: employment.id,
+                chain: employee.chain || existingWallet.chain || 'ethereum',
+                token: employee.token || existingWallet.token || 'usdc'
+              })
               .eq('id', existingWallet.id);
 
             if (updateError) {
               console.error('Error updating wallet:', updateError);
             } else {
-              console.log('Linked wallet to employment:', existingWallet.id);
+              console.log('Updated existing wallet and linked to employment:', existingWallet.id);
             }
           } else {
             // Create new wallet entry linked to employment
@@ -897,6 +1094,48 @@ export class ProfileService {
       return { success: true, data: employments };
     } catch (error) {
       console.error('Error creating payment group:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Update employee payment amount
+  static async updateEmployeePayment(employmentId: string, paymentAmount: number) {
+    try {
+      const { data, error } = await supabase
+        .from('employments')
+        .update({
+          payment_amount: paymentAmount,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', employmentId)
+        .select();
+
+      if (error) {
+        throw error;
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      console.error('Error updating employee payment:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Remove employee from group (delete employment)
+  static async removeEmployeeFromGroup(employmentId: string) {
+    try {
+      const { error } = await supabase
+        .from('employments')
+        .delete()
+        .eq('id', employmentId);
+
+      if (error) {
+        throw error;
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error removing employee from group:', error);
       return { success: false, error: error.message };
     }
   }
