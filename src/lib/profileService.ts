@@ -498,7 +498,7 @@ export class ProfileService {
   static async addEmployeeToCompany(employerId: string, employeeId: string, employmentData: {
     role?: string
     payment_amount?: number
-    payment_frequency?: number
+    payment_frequency?: string
     chain?: string
     token?: string
     token_contract?: string
@@ -812,7 +812,7 @@ export class ProfileService {
           status: 'active',
           role: 'employee',
           payment_amount: 0, // TODO: Parse payment amount
-          payment_frequency: 0,
+          payment_frequency: 'weekly',
           chain: employee.chain || 'ethereum',
           token: employee.token || 'usdc',
           token_contract: '',
