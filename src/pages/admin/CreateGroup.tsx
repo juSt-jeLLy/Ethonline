@@ -44,6 +44,7 @@ const CreateGroup = () => {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
@@ -88,10 +89,12 @@ const CreateGroup = () => {
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
+      setHasSearched(false);
       return;
     }
 
     setIsSearching(true);
+    setHasSearched(true);
     try {
       console.log('🔍 Performing search for:', searchQuery);
       const result = await ProfileService.searchEmployees(searchQuery);
@@ -129,6 +132,7 @@ const CreateGroup = () => {
   const handleClearSearch = () => {
     setSearchQuery("");
     setSearchResults([]);
+    setHasSearched(false);
   };
 
   const handleAddFromSearch = (employee: SearchResult) => {
@@ -406,10 +410,17 @@ const CreateGroup = () => {
                 </div>
               )}
 
-              {/* Show message when no results */}
-              {searchQuery && searchResults.length === 0 && !isSearching && (
+              {/* Show appropriate message based on search state */}
+              {!isSearching && (
                 <div className="text-center py-4 text-muted-foreground">
-                  No employees found for "{searchQuery}"
+                  {!hasSearched ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <Search className="h-4 w-4" />
+                      Click search to find employees
+                    </div>
+                  ) : searchResults.length === 0 ? (
+                    `No employees found for "${searchQuery}"`
+                  ) : null}
                 </div>
               )}
 

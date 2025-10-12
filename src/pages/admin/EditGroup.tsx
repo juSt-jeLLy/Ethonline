@@ -4,9 +4,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Search, Plus, Edit2, Trash2, Save, Loader2, Send, ExternalLink } from "lucide-react";
+import { ArrowLeft, Search, Plus, Edit2, Trash2, Save, Loader2, Send, ExternalLink, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNotification, useTransactionPopup } from "@blockscout/app-sdk";
 import { ProfileService } from "@/lib/profileService";
@@ -24,6 +25,16 @@ interface Employee {
   status: string;
   role: string;
   employment_id: string;
+}
+
+interface SearchResult {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  wallet_address: string;
+  chain?: string;
+  token?: string;
 }
 
 interface GroupData {
@@ -46,12 +57,22 @@ const EditGroup = () => {
   const [groupData, setGroupData] = useState<GroupData | null>(null);
   const [groupName, setGroupName] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editedPayment, setEditedPayment] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null);
+  const [newEmployee, setNewEmployee] = useState({ 
+    address: "", 
+    name: "", 
+    payment: "", 
+    chain: "", 
+    token: "" 
+  });
 
   // Load group data on component mount
   useEffect(() => {
@@ -201,6 +222,121 @@ const EditGroup = () => {
     });
   };
 
+  // Search functionality
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setHasSearched(false);
+      return;
+    }
+
+    setIsSearching(true);
+    setHasSearched(true);
+    try {
+      console.log('🔍 Performing search for:', searchQuery);
+      const result = await ProfileService.searchEmployees(searchQuery);
+      
+      if (result.success) {
+        setSearchResults(result.data);
+        console.log('Search results:', result.data);
+        
+        if (result.data.length === 0) {
+          toast({
+            title: "No Results",
+            description: "No employees found matching your search.",
+          });
+        }
+      } else {
+        console.error('Search error:', result.error);
+        toast({
+          title: "Search Error",
+          description: "Failed to search employees. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      toast({
+        title: "Search Error", 
+        description: "Failed to search employees. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery("");
+    setSearchResults([]);
+    setHasSearched(false);
+  };
+
+  const handleAddFromSearch = (employee: SearchResult) => {
+    // Auto-fill the form fields with search result data
+    setNewEmployee({
+      address: employee.wallet_address,
+      name: `${employee.first_name} ${employee.last_name}`,
+      payment: "0", // Default payment amount
+      chain: employee.chain || "ethereum",
+      token: employee.token || "usdc"
+    });
+    setSearchResults([]);
+    setSearchQuery("");
+    setHasSearched(false);
+    toast({
+      title: "Employee Details Filled",
+      description: `${employee.first_name} ${employee.last_name}'s details have been filled in the form below.`,
+    });
+  };
+
+  const handleAddEmployee = async () => {
+    if (newEmployee.address && newEmployee.name && newEmployee.payment && groupData) {
+      setIsSaving(true);
+      try {
+        // Create employment record for the new employee
+        const result = await ProfileService.addEmployeeToGroup({
+          employerId: groupData.id, // This is the employer_id from the group
+          employeeData: {
+            first_name: newEmployee.name.split(' ')[0] || '',
+            last_name: newEmployee.name.split(' ').slice(1).join(' ') || '',
+            email: '',
+            wallet_address: newEmployee.address,
+            chain: newEmployee.chain,
+            token: newEmployee.token,
+            payment: newEmployee.payment
+          }
+        });
+
+        if (result.success) {
+          // Reload group data to get updated employee list
+          const groupResult = await ProfileService.getPaymentGroupById(id!);
+          if (groupResult.success && groupResult.data) {
+            setEmployees(groupResult.data.employees);
+            setGroupData(groupResult.data);
+          }
+
+          setNewEmployee({ address: "", name: "", payment: "", chain: "", token: "" });
+          toast({
+            title: "Employee Added",
+            description: `${newEmployee.name} has been added to the group.`,
+          });
+        } else {
+          throw new Error(result.error || "Failed to add employee");
+        }
+      } catch (error) {
+        console.error('Error adding employee:', error);
+        toast({
+          title: "Error",
+          description: "Failed to add employee. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-cyan-50">
@@ -283,20 +419,140 @@ const EditGroup = () => {
 
           {/* Search & Add */}
           <Card className="glass-card p-6 hover-lift">
-            <div className="flex gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                <Input
-                  placeholder="Search employee by address or name..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="glass-card border-white/20 pl-10"
-                />
+            <div className="space-y-4">
+              <Label className="text-sm font-medium">Search for Employees</Label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by wallet address (0x...) or name..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                    className="glass-card border-white/20 pl-10"
+                  />
+                </div>
+                <Button 
+                  onClick={handleSearch}
+                  disabled={isSearching}
+                  className="bg-gradient-to-r from-primary to-blue-500 hover:opacity-90"
+                >
+                  {isSearching ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Search className="h-4 w-4" />
+                  )}
+                </Button>
+                {searchQuery && (
+                  <Button 
+                    onClick={handleClearSearch}
+                    variant="outline"
+                    className="glass-card border-white/20"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
-              <Button className="bg-gradient-to-r from-primary to-blue-500 hover:opacity-90">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Employee
-              </Button>
+
+              {/* Search Results */}
+              {searchResults.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Search Results</Label>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {searchResults.map((employee) => (
+                      <motion.div
+                        key={employee.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex items-center justify-between p-3 glass-card rounded-lg hover-lift"
+                      >
+                        <div className="flex-1">
+                          <div className="font-semibold">{employee.first_name} {employee.last_name}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {employee.wallet_address.slice(0, 6)}...{employee.wallet_address.slice(-4)}
+                          </div>
+                          {employee.email && (
+                            <div className="text-xs text-muted-foreground">{employee.email}</div>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => handleAddFromSearch(employee)}
+                          className="bg-gradient-to-r from-primary to-blue-500 hover:opacity-90"
+                        >
+                          <Search className="h-4 w-4 mr-1" />
+                          Fill Details
+                        </Button>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Show appropriate message based on search state */}
+              {!isSearching && (
+                <div className="text-center py-4 text-muted-foreground">
+                  {!hasSearched ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <Search className="h-4 w-4" />
+                      Click search to find employees
+                    </div>
+                  ) : searchResults.length === 0 ? (
+                    `No employees found for "${searchQuery}"`
+                  ) : null}
+                </div>
+              )}
+
+              {/* Employee Form */}
+              <div className="border-t pt-4">
+                <Label className="text-sm font-medium mb-3 block">Add New Employee:</Label>
+                <div className="grid md:grid-cols-3 gap-4">
+                  <Input
+                    placeholder="Wallet Address"
+                    value={newEmployee.address}
+                    onChange={(e) => setNewEmployee({ ...newEmployee, address: e.target.value })}
+                    className="glass-card border-white/20 font-mono"
+                  />
+                  <Input
+                    placeholder="Name"
+                    value={newEmployee.name}
+                    onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
+                    className="glass-card border-white/20"
+                  />
+                  <Input
+                    placeholder="Payment (e.g., 200)"
+                    value={newEmployee.payment}
+                    onChange={(e) => setNewEmployee({ ...newEmployee, payment: e.target.value })}
+                    className="glass-card border-white/20"
+                  />
+                </div>
+                <div className="grid md:grid-cols-2 gap-4 mt-4">
+                  <Input
+                    placeholder="Chain (e.g., ethereum)"
+                    value={newEmployee.chain}
+                    onChange={(e) => setNewEmployee({ ...newEmployee, chain: e.target.value })}
+                    className="glass-card border-white/20"
+                  />
+                  <Input
+                    placeholder="Token (e.g., usdc)"
+                    value={newEmployee.token}
+                    onChange={(e) => setNewEmployee({ ...newEmployee, token: e.target.value })}
+                    className="glass-card border-white/20"
+                  />
+                </div>
+                <Button
+                  onClick={handleAddEmployee}
+                  disabled={isSaving || !newEmployee.address || !newEmployee.name || !newEmployee.payment}
+                  className="mt-4 bg-gradient-to-r from-primary to-blue-500 hover:opacity-90"
+                >
+                  {isSaving ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="mr-2 h-4 w-4" />
+                  )}
+                  {isSaving ? "Adding..." : "Add Employee"}
+                </Button>
+              </div>
             </div>
           </Card>
 

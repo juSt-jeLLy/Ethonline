@@ -1140,6 +1140,240 @@ export class ProfileService {
     }
   }
 
+  // Add employee to existing group
+  static async addEmployeeToGroup(data: {
+    employerId: string;
+    employeeData: {
+      first_name: string;
+      last_name: string;
+      email: string;
+      wallet_address: string;
+      chain: string;
+      token: string;
+      payment: string;
+    };
+  }) {
+    try {
+      console.log('Adding employee to group:', data);
+
+      let employeeId = null;
+
+      // Step 1: Check if wallet address exists in wallets table
+      if (data.employeeData.wallet_address && data.employeeData.wallet_address.trim() !== '') {
+        console.log('Checking if wallet address exists:', data.employeeData.wallet_address);
+
+        const { data: existingWallet, error: walletError } = await supabase
+          .from('wallets')
+          .select('employee_id')
+          .eq('account_address', data.employeeData.wallet_address)
+          .maybeSingle();
+
+        if (walletError) {
+          console.error('Error checking wallet:', walletError);
+          throw walletError;
+        }
+
+        if (existingWallet) {
+          employeeId = existingWallet.employee_id;
+          console.log('Found existing employee by wallet address:', employeeId);
+        }
+      }
+
+      // Step 2: If no wallet found, create new employee
+      if (!employeeId) {
+        console.log('Creating new employee:', data.employeeData.first_name, data.employeeData.last_name);
+
+        // Create new employee (email is optional)
+        const { data: newEmployee, error: employeeError } = await supabase
+          .from('employees')
+          .insert({
+            first_name: data.employeeData.first_name,
+            last_name: data.employeeData.last_name,
+            email: data.employeeData.email || null // Allow null emails
+          })
+          .select()
+          .single();
+
+        if (employeeError) {
+          console.error('Error creating employee:', employeeError);
+          throw employeeError;
+        }
+
+        employeeId = newEmployee.id;
+        console.log('Created new employee with ID:', employeeId);
+      } else {
+        console.log('Using existing employee with ID:', employeeId);
+      }
+
+      // Create employment record
+      const employmentRecord = {
+        employer_id: data.employerId,
+        employee_id: employeeId,
+        status: 'active',
+        role: 'employee',
+        payment_amount: parseFloat(data.employeeData.payment) || 0,
+        payment_frequency: 'monthly', // Default frequency
+        chain: data.employeeData.chain || 'ethereum',
+        token: data.employeeData.token || 'usdc',
+        token_contract: '',
+        token_decimals: 18,
+        updated_at: new Date().toISOString()
+      };
+
+      console.log('Creating employment record:', employmentRecord);
+
+      // Insert employment record
+      const { data: employment, error: employmentError } = await supabase
+        .from('employments')
+        .insert(employmentRecord)
+        .select()
+        .single();
+
+      console.log('Employment insert result:', { employment, employmentError });
+
+      if (employmentError) {
+        console.error('Employment creation error:', employmentError);
+        throw employmentError;
+      }
+
+      console.log('Created employment record:', employment);
+
+      // Handle wallet linking
+      if (data.employeeData.wallet_address && data.employeeData.wallet_address.trim() !== '') {
+        // Check if wallet exists for this employee and address
+        const { data: existingWallet, error: walletError } = await supabase
+          .from('wallets')
+          .select('id, employment_id, chain, token')
+          .eq('employee_id', employment.employee_id)
+          .eq('account_address', data.employeeData.wallet_address)
+          .maybeSingle();
+
+        if (walletError) {
+          console.error('Error checking wallet:', walletError);
+          throw walletError;
+        }
+
+        if (existingWallet) {
+          // Update existing wallet to link to employment and update preferences
+          const { error: updateError } = await supabase
+            .from('wallets')
+            .update({
+              employment_id: employment.id,
+              chain: data.employeeData.chain || existingWallet.chain || 'ethereum',
+              token: data.employeeData.token || existingWallet.token || 'usdc'
+            })
+            .eq('id', existingWallet.id);
+
+          if (updateError) {
+            console.error('Error updating wallet:', updateError);
+            throw updateError;
+          } else {
+            console.log('Updated existing wallet and linked to employment:', existingWallet.id);
+          }
+        } else {
+          // Create new wallet entry linked to employment
+          const { error: createError } = await supabase
+            .from('wallets')
+            .insert({
+              employee_id: employment.employee_id,
+              employment_id: employment.id,
+              chain: data.employeeData.chain || 'ethereum',
+              token: data.employeeData.token || 'usdc',
+              account_address: data.employeeData.wallet_address,
+              is_default: true
+            });
+
+          if (createError) {
+            console.error('Error creating wallet:', createError);
+            throw createError;
+          } else {
+            console.log('Created new wallet for employment:', employment.id);
+          }
+        }
+      }
+
+      return { success: true, data: employment };
+    } catch (error) {
+      console.error('Error adding employee to group:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Get employment data for a specific wallet address
+  static async getEmploymentByWallet(walletAddress: string) {
+    try {
+      // First, find the wallet and get the employee_id
+      const { data: wallet, error: walletError } = await supabase
+        .from('wallets')
+        .select('employee_id, employment_id')
+        .eq('account_address', walletAddress)
+        .maybeSingle();
+
+      if (walletError) {
+        throw walletError;
+      }
+
+      if (!wallet) {
+        return { success: true, data: null }; // No wallet found
+      }
+
+      // Get employment data with employer and employee details
+      const { data: employment, error: employmentError } = await supabase
+        .from('employments')
+        .select(`
+          *,
+          employers!inner(
+            id,
+            name,
+            email
+          ),
+          employees!inner(
+            id,
+            first_name,
+            last_name,
+            email
+          )
+        `)
+        .eq('employee_id', wallet.employee_id)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (employmentError) {
+        throw employmentError;
+      }
+
+      if (!employment) {
+        return { success: true, data: null }; // No active employment found
+      }
+
+      // Format the employment data
+      const employmentData = {
+        id: employment.id,
+        company: employment.employers.name,
+        companyEmail: employment.employers.email,
+        employee: {
+          id: employment.employees.id,
+          first_name: employment.employees.first_name,
+          last_name: employment.employees.last_name,
+          email: employment.employees.email
+        },
+        monthlyPayment: employment.payment_amount || 0,
+        paymentFrequency: employment.payment_frequency || 'monthly',
+        chain: employment.chain || 'ethereum',
+        token: employment.token || 'usdc',
+        status: employment.status,
+        role: employment.role,
+        created_at: employment.created_at,
+        updated_at: employment.updated_at
+      };
+
+      return { success: true, data: employmentData };
+    } catch (error) {
+      console.error('Error fetching employment by wallet:', error);
+      return { success: false, error: error.message, data: null };
+    }
+  }
+
   // Get dashboard statistics for a specific company
   static async getCompanyDashboardStats(employerId: string) {
     try {
