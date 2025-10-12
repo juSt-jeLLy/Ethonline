@@ -101,12 +101,12 @@ export class ProfileService {
         console.log('Created new employee with ID:', employeeId)
       }
 
-      // Step 4: Create wallet entry for employee (always create one)
+      // Step 4: Handle wallet entry (create or update)
       if (profileData.wallet_address) {
         // Check if this wallet address already exists for this employee
         const { data: existingWallet, error: checkError } = await supabase
           .from('wallets')
-          .select('id')
+          .select('id, account_address, chain, token')
           .eq('employee_id', employeeId)
           .eq('account_address', profileData.wallet_address)
           .maybeSingle()
@@ -115,8 +115,23 @@ export class ProfileService {
           throw checkError
         }
 
-        if (!existingWallet) {
-          // Only create new wallet if this address doesn't exist for this employee
+        if (existingWallet) {
+          // Update existing wallet with new preferences
+          const { data: walletData, error: walletError } = await supabase
+            .from('wallets')
+            .update({
+              chain: profileData.preferred_chain || existingWallet.chain || 'ethereum',
+              token: profileData.preferred_token || existingWallet.token || 'usdc'
+            })
+            .eq('id', existingWallet.id)
+            .select()
+
+          if (walletError) {
+            throw walletError
+          }
+          console.log('Updated existing wallet for employee:', employeeId)
+        } else {
+          // Create new wallet if this address doesn't exist for this employee
           const { data: walletData, error: walletError } = await supabase
             .from('wallets')
             .insert({
@@ -132,26 +147,53 @@ export class ProfileService {
             throw walletError
           }
           console.log('Created new wallet for employee:', employeeId)
-        } else {
-          console.log('Wallet address already exists for this employee')
         }
       } else {
-        // Create basic wallet entry even without address
-        const { data: walletData, error: walletError } = await supabase
+        // Check if employee has any default wallet to update
+        const { data: existingDefaultWallet, error: checkError } = await supabase
           .from('wallets')
-          .insert({
-            employee_id: employeeId,
-            chain: profileData.preferred_chain || 'ethereum',
-            token: profileData.preferred_token || 'usdc',
-            account_address: '', // Empty address - can be filled later
-            is_default: true
-          })
-          .select()
+          .select('id, chain, token')
+          .eq('employee_id', employeeId)
+          .eq('is_default', true)
+          .maybeSingle()
 
-        if (walletError) {
-          throw walletError
+        if (checkError) {
+          throw checkError
         }
-        console.log('Created basic wallet entry for employee:', employeeId)
+
+        if (existingDefaultWallet) {
+          // Update existing default wallet preferences
+          const { data: walletData, error: walletError } = await supabase
+            .from('wallets')
+            .update({
+              chain: profileData.preferred_chain || existingDefaultWallet.chain || 'ethereum',
+              token: profileData.preferred_token || existingDefaultWallet.token || 'usdc'
+            })
+            .eq('id', existingDefaultWallet.id)
+            .select()
+
+          if (walletError) {
+            throw walletError
+          }
+          console.log('Updated existing default wallet preferences for employee:', employeeId)
+        } else {
+          // Create basic wallet entry even without address
+          const { data: walletData, error: walletError } = await supabase
+            .from('wallets')
+            .insert({
+              employee_id: employeeId,
+              chain: profileData.preferred_chain || 'ethereum',
+              token: profileData.preferred_token || 'usdc',
+              account_address: '', // Empty address - can be filled later
+              is_default: true
+            })
+            .select()
+
+          if (walletError) {
+            throw walletError
+          }
+          console.log('Created basic wallet entry for employee:', employeeId)
+        }
       }
 
       return { success: true, data: employeeResult, employeeId }
