@@ -34,7 +34,7 @@ export interface Employment {
   status: string
   role: string
   payment_amount?: number
-  payment_frequency?: string
+  payment_frequency?: number
   chain?: string
   token?: string
   token_contract?: string

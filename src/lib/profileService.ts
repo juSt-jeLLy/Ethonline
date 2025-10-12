@@ -50,8 +50,8 @@ export class ProfileService {
         }
       }
 
-      // Step 2: Check if employee exists by email (fallback)
-      if (!employeeId && profileData.email) {
+      // Step 2: Check if employee exists by email (fallback) - only if email is provided
+      if (!employeeId && profileData.email && profileData.email.trim() !== '') {
         const { data: existingEmployee, error: emailError } = await supabase
           .from('employees')
           .select('id')
@@ -72,7 +72,7 @@ export class ProfileService {
       const employeeData = {
         first_name: profileData.first_name,
         last_name: profileData.last_name,
-        email: profileData.email,
+        email: profileData.email || null, // Allow null emails
         updated_at: new Date().toISOString()
       }
 
@@ -377,8 +377,8 @@ export class ProfileService {
         console.log('⚠️ No wallet address provided for search')
       }
 
-      // Step 3: If not found by wallet, try by email
-      if (!employeeId && profileData.email) {
+      // Step 3: If not found by wallet, try by email (only if email is provided)
+      if (!employeeId && profileData.email && profileData.email.trim() !== '') {
         console.log('🔍 Step 3: Searching by email:', profileData.email);
         console.log('🔍 Searching for email =', `"${profileData.email}"`);
         
@@ -434,7 +434,7 @@ export class ProfileService {
           console.log('❌ No employee found by email')
         }
       } else if (!employeeId) {
-        console.log('⚠️ No email provided for search')
+        console.log('⚠️ No email provided for search or email is empty')
       }
 
       const result = { 
@@ -498,7 +498,7 @@ export class ProfileService {
   static async addEmployeeToCompany(employerId: string, employeeId: string, employmentData: {
     role?: string
     payment_amount?: number
-    payment_frequency?: string
+    payment_frequency?: number
     chain?: string
     token?: string
     token_contract?: string
@@ -679,7 +679,7 @@ export class ProfileService {
             id: employee.id,
             first_name: employee.first_name,
             last_name: employee.last_name,
-            email: employee.email,
+            email: employee.email || '', // Handle null emails
             wallet_address: employee.wallets?.[0]?.account_address || '',
             chain: employee.wallets?.[0]?.chain || '',
             token: employee.wallets?.[0]?.token || ''
@@ -765,13 +765,13 @@ export class ProfileService {
         if (employee.id.startsWith('temp-')) {
           console.log('Creating new employee:', employee.first_name, employee.last_name);
           
-          // Create new employee
+          // Create new employee (email is now optional)
           const { data: newEmployee, error: employeeError } = await supabase
             .from('employees')
             .insert({
               first_name: employee.first_name,
               last_name: employee.last_name,
-              email: employee.email || ''
+              email: employee.email || null // Allow null emails
             })
             .select()
             .single();
@@ -811,12 +811,13 @@ export class ProfileService {
           employee_id: employeeId,
           status: 'active',
           role: 'employee',
-          payment_amount: 0, // TODO: Parse payment amount
-          payment_frequency: 'weekly',
+          payment_amount: parseFloat(employee.payment) || 0,
+          payment_frequency: 'monthly', // Default frequency, can be made dynamic
           chain: employee.chain || 'ethereum',
           token: employee.token || 'usdc',
           token_contract: '',
-          token_decimals: 18
+          token_decimals: 18,
+          updated_at: new Date().toISOString()
         };
 
         employmentRecords.push(employmentRecord);

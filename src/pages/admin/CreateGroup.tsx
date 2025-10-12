@@ -18,6 +18,7 @@ interface Employee {
   wallet_address: string;
   chain: string;
   token: string;
+  payment: string;
 }
 
 interface SearchResult {
@@ -159,7 +160,8 @@ const CreateGroup = () => {
         email: '',
         wallet_address: newEmployee.address,
         chain: newEmployee.chain,
-        token: newEmployee.token
+        token: newEmployee.token,
+        payment: newEmployee.payment
       }]);
       setNewEmployee({ address: "", name: "", payment: "", chain: "", token: "" });
       toast({
@@ -218,7 +220,7 @@ const CreateGroup = () => {
           wallet_address: emp.wallet_address,
           chain: emp.chain,
           token: emp.token,
-          payment: "0" // TODO: Parse payment amount from form
+          payment: emp.payment || "0" // Use the payment from each employee
         }))
       });
 
