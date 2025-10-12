@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { NotificationProvider, TransactionPopupProvider } from "@blockscout/app-sdk";
 import Web3Provider from "@/providers/Web3Provider";
 import { WalletGuard } from "@/components/WalletGuard";
 import Landing from "./pages/Landing";
@@ -21,85 +22,89 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <Web3Provider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Landing />} />
-            
-            {/* Employee Routes - Protected */}
-            <Route 
-              path="/employee/home" 
-              element={
-                <WalletGuard>
-                  <EmployeeHome />
-                </WalletGuard>
-              } 
-            />
-            <Route 
-              path="/employee/employment" 
-              element={
-                <WalletGuard>
-                  <Employment />
-                </WalletGuard>
-              } 
-            />
-            <Route 
-              path="/employee/profile" 
-              element={
-                <WalletGuard>
-                  <EmployeeProfile />
-                </WalletGuard>
-              } 
-            />
-            
-            {/* Admin Routes - Protected */}
-            <Route 
-              path="/admin/home" 
-              element={
-                <WalletGuard>
-                  <AdminHome />
-                </WalletGuard>
-              } 
-            />
-            <Route 
-              path="/admin/create-group" 
-              element={
-                <WalletGuard>
-                  <CreateGroup />
-                </WalletGuard>
-              } 
-            />
-            <Route 
-              path="/admin/groups" 
-              element={
-                <WalletGuard>
-                  <Groups />
-                </WalletGuard>
-              } 
-            />
-            <Route 
-              path="/admin/edit-group/:id" 
-              element={
-                <WalletGuard>
-                  <EditGroup />
-                </WalletGuard>
-              } 
-            />
-            <Route 
-              path="/admin/profile" 
-              element={
-                <WalletGuard>
-                  <AdminProfile />
-                </WalletGuard>
-              } 
-            />
-            
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
+      <NotificationProvider>
+        <TransactionPopupProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Landing />} />
+                
+                {/* Employee Routes - Protected */}
+                <Route 
+                  path="/employee/home" 
+                  element={
+                    <WalletGuard>
+                      <EmployeeHome />
+                    </WalletGuard>
+                  } 
+                />
+                <Route 
+                  path="/employee/employment" 
+                  element={
+                    <WalletGuard>
+                      <Employment />
+                    </WalletGuard>
+                  } 
+                />
+                <Route 
+                  path="/employee/profile" 
+                  element={
+                    <WalletGuard>
+                      <EmployeeProfile />
+                    </WalletGuard>
+                  } 
+                />
+                
+                {/* Admin Routes - Protected */}
+                <Route 
+                  path="/admin/home" 
+                  element={
+                    <WalletGuard>
+                      <AdminHome />
+                    </WalletGuard>
+                  } 
+                />
+                <Route 
+                  path="/admin/create-group" 
+                  element={
+                    <WalletGuard>
+                      <CreateGroup />
+                    </WalletGuard>
+                  } 
+                />
+                <Route 
+                  path="/admin/groups" 
+                  element={
+                    <WalletGuard>
+                      <Groups />
+                    </WalletGuard>
+                  } 
+                />
+                <Route 
+                  path="/admin/edit-group/:id" 
+                  element={
+                    <WalletGuard>
+                      <EditGroup />
+                    </WalletGuard>
+                  } 
+                />
+                <Route 
+                  path="/admin/profile" 
+                  element={
+                    <WalletGuard>
+                      <AdminProfile />
+                    </WalletGuard>
+                  } 
+                />
+                
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
+        </TransactionPopupProvider>
+      </NotificationProvider>
     </Web3Provider>
   </QueryClientProvider>
 );

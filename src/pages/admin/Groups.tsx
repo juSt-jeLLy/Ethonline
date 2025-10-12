@@ -5,8 +5,9 @@ import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, DollarSign, Calendar, Edit, Send, Loader2 } from "lucide-react";
+import { Building2, Users, DollarSign, Calendar, Edit, Send, Loader2, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useNotification, useTransactionPopup } from "@blockscout/app-sdk";
 import { ProfileService } from "@/lib/profileService";
 
 interface Group {
@@ -39,8 +40,11 @@ interface Group {
 const Groups = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { openTxToast } = useNotification();
+  const { openPopup } = useTransactionPopup();
   const [groups, setGroups] = useState<Group[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null);
 
   // Mock data as fallback
   const mockGroups: Group[] = [
@@ -108,10 +112,40 @@ const Groups = () => {
     loadGroups();
   }, []);
 
-  const handlePayGroup = (groupName: string) => {
-    toast({
-      title: "Payment Initiated",
-      description: `Processing payments for ${groupName}`,
+  const handlePayGroup = async (group: Group) => {
+    setIsProcessingPayment(group.id);
+    
+    try {
+      // Use a known successful transaction hash for demonstration
+      // This is a real successful transaction on Ethereum mainnet
+      const knownGoodTxHash = "0x5c504ed432cb51138bcf09aa5e8a410dd4a1e204ef84bfed1be16dfba1b22060";
+      
+      // Show initial toast
+      toast({
+        title: "Payment Initiated",
+        description: `Processing payments for ${group.name}`,
+      });
+
+      // Use Blockscout SDK to show transaction toast
+      // Using Ethereum mainnet (chain ID "1") for demo
+      await openTxToast("1", knownGoodTxHash);
+      
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      toast({
+        title: "Payment Error",
+        description: "Failed to process payment. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingPayment(null);
+    }
+  };
+
+  const handleViewTransactionHistory = () => {
+    // Open transaction history popup for Ethereum mainnet
+    openPopup({
+      chainId: "1", // Ethereum mainnet
     });
   };
 
@@ -132,13 +166,23 @@ const Groups = () => {
                 {isLoading ? "Loading groups..." : `Manage all your payment groups (${groups.length} groups)`}
               </p>
             </div>
-            <Button
-              onClick={() => navigate("/admin/create-group")}
-              className="bg-gradient-to-r from-primary to-blue-500 hover:opacity-90"
-            >
-              <Building2 className="mr-2 h-4 w-4" />
-              Create New Group
-            </Button>
+            <div className="flex gap-3">
+              <Button
+                onClick={handleViewTransactionHistory}
+                variant="outline"
+                className="glass-card border-white/20"
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                View Transactions
+              </Button>
+              <Button
+                onClick={() => navigate("/admin/create-group")}
+                className="bg-gradient-to-r from-primary to-blue-500 hover:opacity-90"
+              >
+                <Building2 className="mr-2 h-4 w-4" />
+                Create New Group
+              </Button>
+            </div>
           </div>
 
           {isLoading ? (
@@ -229,13 +273,18 @@ const Groups = () => {
                           <Edit className="mr-2 h-4 w-4" />
                           Edit
                         </Button>
-                        <Button
-                          className="flex-1 bg-gradient-to-r from-primary to-cyan-500 hover:opacity-90"
-                          onClick={() => handlePayGroup(group.name)}
-                        >
+                      <Button
+                        className="flex-1 bg-gradient-to-r from-primary to-cyan-500 hover:opacity-90"
+                        onClick={() => handlePayGroup(group)}
+                        disabled={isProcessingPayment === group.id}
+                      >
+                        {isProcessingPayment === group.id ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
                           <Send className="mr-2 h-4 w-4" />
-                          Pay
-                        </Button>
+                        )}
+                        {isProcessingPayment === group.id ? "Processing..." : "Pay"}
+                      </Button>
                       </div>
                     </div>
                   </Card>

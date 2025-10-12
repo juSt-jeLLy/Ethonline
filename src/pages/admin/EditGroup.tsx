@@ -6,8 +6,9 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Search, Plus, Edit2, Trash2, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Search, Plus, Edit2, Trash2, Save, Loader2, Send, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useNotification, useTransactionPopup } from "@blockscout/app-sdk";
 import { ProfileService } from "@/lib/profileService";
 
 interface Employee {
@@ -39,6 +40,8 @@ const EditGroup = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { openTxToast } = useNotification();
+  const { openPopup } = useTransactionPopup();
 
   const [groupData, setGroupData] = useState<GroupData | null>(null);
   const [groupName, setGroupName] = useState("");
@@ -48,6 +51,7 @@ const EditGroup = () => {
   const [editedPayment, setEditedPayment] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null);
 
   // Load group data on component mount
   useEffect(() => {
@@ -160,6 +164,43 @@ const EditGroup = () => {
     }
   };
 
+  const handlePayEmployee = async (employee: Employee) => {
+    setIsProcessingPayment(employee.employment_id);
+    
+    try {
+      // Use a known successful transaction hash for demonstration
+      // This is a real successful transaction on Ethereum mainnet
+      const knownGoodTxHash = "0x5c504ed432cb51138bcf09aa5e8a410dd4a1e204ef84bfed1be16dfba1b22060";
+      
+      // Show initial toast
+      toast({
+        title: "Payment Initiated",
+        description: `Processing payment for ${employee.first_name} ${employee.last_name}`,
+      });
+
+      // Use Blockscout SDK to show transaction toast
+      // Using Ethereum mainnet (chain ID "1") for demo
+      await openTxToast("1", knownGoodTxHash);
+      
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      toast({
+        title: "Payment Error",
+        description: "Failed to process payment. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingPayment(null);
+    }
+  };
+
+  const handleViewTransactionHistory = () => {
+    // Open transaction history popup for Ethereum mainnet
+    openPopup({
+      chainId: "1", // Ethereum mainnet
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-cyan-50">
@@ -204,18 +245,28 @@ const EditGroup = () => {
           animate={{ opacity: 1, y: 0 }}
           className="max-w-5xl mx-auto space-y-8"
         >
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              onClick={() => navigate("/admin/groups")}
-              className="glass-card"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <div className="space-y-2">
-              <h1 className="text-4xl font-bold gradient-text">Edit Payment Group</h1>
-              <p className="text-muted-foreground">Manage employees and update payment details</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="ghost"
+                onClick={() => navigate("/admin/groups")}
+                className="glass-card"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <div className="space-y-2">
+                <h1 className="text-4xl font-bold gradient-text">Edit Payment Group</h1>
+                <p className="text-muted-foreground">Manage employees and update payment details</p>
+              </div>
             </div>
+            <Button
+              onClick={handleViewTransactionHistory}
+              variant="outline"
+              className="glass-card border-white/20"
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              View Transactions
+            </Button>
           </div>
 
           {/* Group Name */}
@@ -325,12 +376,27 @@ const EditGroup = () => {
                         <Button
                           variant="ghost"
                           size="icon"
+                          onClick={() => handlePayEmployee(emp)}
+                          className="text-green-600 hover:bg-green-500/10"
+                          disabled={isProcessingPayment === emp.employment_id}
+                          title="Pay Employee"
+                        >
+                          {isProcessingPayment === emp.employment_id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => {
                             setEditingId(emp.employment_id);
                             setEditedPayment(emp.payment_amount?.toString() || '');
                           }}
                           className="text-primary hover:bg-primary/10"
                           disabled={isSaving}
+                          title="Edit Payment"
                         >
                           <Edit2 className="h-4 w-4" />
                         </Button>
@@ -340,6 +406,7 @@ const EditGroup = () => {
                           onClick={() => handleRemoveEmployee(emp.employment_id)}
                           className="text-destructive hover:bg-destructive/10"
                           disabled={isSaving}
+                          title="Remove Employee"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

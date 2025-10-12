@@ -1139,4 +1139,80 @@ export class ProfileService {
       return { success: false, error: error.message };
     }
   }
+
+  // Get dashboard statistics for a specific company
+  static async getCompanyDashboardStats(employerId: string) {
+    try {
+      // Get all employments for this company
+      const { data: employments, error: employmentError } = await supabase
+        .from('employments')
+        .select(`
+          *,
+          employees!inner(
+            id,
+            first_name,
+            last_name,
+            email
+          )
+        `)
+        .eq('employer_id', employerId);
+
+      if (employmentError) {
+        throw employmentError;
+      }
+
+      if (!employments || employments.length === 0) {
+        return {
+          success: true,
+          data: {
+            totalEmployees: 0,
+            activeGroups: 0,
+            monthlyPayout: 0,
+            pendingPayments: 0,
+            recentGroups: []
+          }
+        };
+      }
+
+      // Calculate statistics
+      const totalEmployees = employments.length;
+      const activeGroups = 1; // Since we group by employer, each employer = 1 group
+      const monthlyPayout = employments.reduce((sum, emp) => sum + (emp.payment_amount || 0), 0);
+      const pendingPayments = employments.filter(emp => emp.status === 'pending').length;
+
+      // Get recent groups (just the current company info)
+      const { data: employer, error: employerError } = await supabase
+        .from('employers')
+        .select('*')
+        .eq('id', employerId)
+        .single();
+
+      if (employerError) {
+        throw employerError;
+      }
+
+      const recentGroups = [{
+        id: employer.id,
+        name: employer.name,
+        employees: totalEmployees,
+        payout: monthlyPayout,
+        status: 'Active',
+        created_at: employer.created_at
+      }];
+
+      return {
+        success: true,
+        data: {
+          totalEmployees,
+          activeGroups,
+          monthlyPayout,
+          pendingPayments,
+          recentGroups
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error);
+      return { success: false, error: error.message, data: null };
+    }
+  }
 }
