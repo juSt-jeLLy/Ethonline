@@ -1374,6 +1374,131 @@ export class ProfileService {
     }
   }
 
+  // Get employer transactions from Blockscout API
+  static async getEmployerTransactions(employerAddress: string, limit: number = 20) {
+    try {
+      console.log('Fetching transactions for employer:', employerAddress);
+      
+      // Use Ethereum mainnet Blockscout API
+      const response = await fetch(
+        `https://eth.blockscout.com/api/v2/addresses/${employerAddress}/transactions?filter=to&limit=${limit}`
+      );
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Format the transaction data
+      const formattedTransactions = data.items?.map((tx: any) => ({
+        hash: tx.hash,
+        timestamp: tx.timestamp,
+        value: tx.value,
+        valueFormatted: tx.value_formatted,
+        from: tx.from,
+        to: tx.to,
+        status: tx.status,
+        method: tx.method,
+        gasUsed: tx.gas_used,
+        gasPrice: tx.gas_price,
+        blockNumber: tx.block_number,
+        transactionIndex: tx.position
+      })) || [];
+
+      return {
+        success: true,
+        data: formattedTransactions
+      };
+    } catch (error) {
+      console.error('Error fetching employer transactions:', error);
+      return { success: false, error: error.message, data: [] };
+    }
+  }
+
+  // Get payment transactions (incoming to employee wallet)
+  static async getPaymentTransactions(employeeWallet: string, employerAddress: string, limit: number = 10) {
+    try {
+      console.log('Fetching payment transactions for employee:', employeeWallet);
+      
+      // Get all transactions for the employee wallet
+      const response = await fetch(
+        `https://eth.blockscout.com/api/v2/addresses/${employeeWallet}/transactions?filter=to&limit=${limit}`
+      );
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Filter for transactions from the employer (payments)
+      const paymentTransactions = data.items?.filter((tx: any) => 
+        tx.from?.toLowerCase() === employerAddress.toLowerCase() &&
+        tx.value > 0 &&
+        tx.status === 'success'
+      ).map((tx: any) => ({
+        hash: tx.hash,
+        timestamp: tx.timestamp,
+        value: tx.value,
+        valueFormatted: tx.value_formatted,
+        from: tx.from,
+        to: tx.to,
+        status: tx.status,
+        method: tx.method,
+        gasUsed: tx.gas_used,
+        blockNumber: tx.block_number,
+        isPayment: true
+      })) || [];
+
+      return {
+        success: true,
+        data: paymentTransactions
+      };
+    } catch (error) {
+      console.error('Error fetching payment transactions:', error);
+      return { success: false, error: error.message, data: [] };
+    }
+  }
+
+  // Get real-time transaction monitoring setup
+  static setupTransactionMonitoring(employeeWallet: string, employerAddress: string, onNewTransaction: (tx: any) => void) {
+    try {
+      // For demo purposes, we'll use a polling approach instead of WebSocket
+      // In production, you'd use WebSocket: wss://eth.blockscout.com/api/v2/websocket
+      
+      const pollInterval = 30000; // Poll every 30 seconds
+      
+      const pollForNewTransactions = async () => {
+        try {
+          const result = await this.getPaymentTransactions(employeeWallet, employerAddress, 5);
+          if (result.success && result.data.length > 0) {
+            // Check if any transactions are newer than our last check
+            result.data.forEach(tx => {
+              const txTime = new Date(tx.timestamp).getTime();
+              const now = Date.now();
+              // If transaction is less than 1 minute old, consider it "new"
+              if (now - txTime < 60000) {
+                onNewTransaction(tx);
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Error polling for transactions:', error);
+        }
+      };
+
+      // Start polling
+      const intervalId = setInterval(pollForNewTransactions, pollInterval);
+      
+      // Return cleanup function
+      return () => clearInterval(intervalId);
+    } catch (error) {
+      console.error('Error setting up transaction monitoring:', error);
+      return () => {}; // Return empty cleanup function
+    }
+  }
+
   // Get dashboard statistics for a specific company
   static async getCompanyDashboardStats(employerId: string) {
     try {
