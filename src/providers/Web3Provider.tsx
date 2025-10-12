@@ -1,4 +1,4 @@
-import { NexusProvider } from '@avail-project/nexus-widgets'
+import { NexusProvider as NexusWidgetProvider } from '@avail-project/nexus-widgets'
 import { WagmiProvider } from 'wagmi'
 import { defineChain, type Chain } from 'viem'
 import {
@@ -27,7 +27,7 @@ import {
   RainbowKitProvider,
   Theme,
 } from '@rainbow-me/rainbowkit'
-import { merge } from 'lodash'
+import NexusCoreProvider from './NexusProvider'
 
 const walletConnectProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'YOUR_PROJECT_ID'
 
@@ -112,7 +112,7 @@ const customTheme: Theme = {
     modalOverlay: 'blur(4px)',
   },
   colors: {
-    accentColor: 'hsl(45, 93%, 47%)', // Bright yellow for testing
+    accentColor: 'hsl(45, 93%, 47%)', // Bright yellow
     accentColorForeground: 'hsl(0, 0%, 0%)',
     actionButtonBorder: 'hsl(220, 13%, 91%)',
     actionButtonBorderMobile: 'hsl(220, 13%, 91%)',
@@ -185,14 +185,16 @@ const Web3Provider = ({ children }: Web3ProviderProps) => {
       <WagmiProvider config={config}>
         <QueryClientProvider client={queryClient}>
           <RainbowKitProvider modalSize="compact" theme={customTheme}>
-            <NexusProvider
+            <NexusWidgetProvider
               config={{
                 debug: true,
                 network: 'mainnet',
               }}
             >
-              {children}
-            </NexusProvider>
+              <NexusCoreProvider>
+                {children}
+              </NexusCoreProvider>
+            </NexusWidgetProvider>
           </RainbowKitProvider>
         </QueryClientProvider>
       </WagmiProvider>
