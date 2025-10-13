@@ -68,9 +68,9 @@ const Home = () => {
   const stats = dashboardStats ? [
     {
       label: "Total Earned",
-      value: `$${dashboardStats.totalEarned.toLocaleString()}`,
+      value: `$${dashboardStats.totalEarned.toFixed(6)}`,
       icon: DollarSign,
-      trend: dashboardStats.totalPotentialEarnings > 0 ? `$${dashboardStats.totalPotentialEarnings.toLocaleString()} potential` : "No payments yet",
+      trend: dashboardStats.totalPotentialEarnings > 0 ? `$${dashboardStats.totalPotentialEarnings.toFixed(6)} potential` : "No payments yet",
       color: "from-green-500 to-emerald-500",
     },
     {

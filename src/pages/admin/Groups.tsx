@@ -144,8 +144,8 @@ const Groups = () => {
   }, [toast]);
 
   // Function to fetch wallet data for employees and calculate proper totals
-  const processGroupsWithWalletData = async (groups: Group[]) => {
-    const processedGroups = [];
+  const processGroupsWithWalletData = async (groups: any[]) => {
+    const processedGroups: Group[] = [];
     
     for (const group of groups) {
       if (group.employeeDetails && group.employeeDetails.length > 0) {
@@ -163,34 +163,34 @@ const Groups = () => {
                 wallet_address: walletResult.data.account_address || '',
                 chain: walletResult.data.chain || employee.chain || 'ethereum',
                 token: walletResult.data.token || employee.token || 'usdc',
-                payment_amount: employee.payment_amount || 0
+                payment_amount: (parseFloat(employee.payment_amount?.toString() || '0')).toString()
               };
               
               employeesWithWallets.push(employeeWithWallet);
               
               // Add to USDC total
-              totalUSDC += convertToUSDC(employee.payment_amount || 0, employee.token);
+              totalUSDC += convertToUSDC(parseFloat(employee.payment_amount?.toString() || '0'), employee.token);
             } else {
               // If no wallet found, use employee data but mark as invalid for payment
               employeesWithWallets.push({
                 ...employee,
                 wallet_address: '',
-                payment_amount: employee.payment_amount || 0
+                payment_amount: (parseFloat(employee.payment_amount?.toString() || '0')).toString()
               });
               
               // Still add to USDC total for accurate reporting
-              totalUSDC += convertToUSDC(employee.payment_amount || 0, employee.token);
+              totalUSDC += convertToUSDC(parseFloat(employee.payment_amount?.toString() || '0'), employee.token);
             }
           } catch (error) {
             console.error(`Error fetching wallet for employee ${employee.id}:`, error);
             employeesWithWallets.push({
               ...employee,
               wallet_address: '',
-              payment_amount: employee.payment_amount || 0
+              payment_amount: (parseFloat(employee.payment_amount?.toString() || '0')).toString()
             });
             
             // Still add to USDC total for accurate reporting
-            totalUSDC += convertToUSDC(employee.payment_amount || 0, employee.token);
+            totalUSDC += convertToUSDC(parseFloat(employee.payment_amount?.toString() || '0'), employee.token);
           }
         }
         
@@ -198,12 +198,12 @@ const Groups = () => {
           ...group,
           employeeDetails: employeesWithWallets,
           totalPaymentUSDC: totalUSDC
-        });
+        } as Group);
       } else {
         processedGroups.push({
           ...group,
           totalPaymentUSDC: 0
-        });
+        } as Group);
       }
     }
     
@@ -225,7 +225,7 @@ const Groups = () => {
       throw new Error(`Employee ${employee.first_name} ${employee.last_name} has no wallet address`);
     }
     
-    if (!employee.payment_amount || employee.payment_amount <= 0) {
+    if (!employee.payment_amount || parseFloat(employee.payment_amount) <= 0) {
       throw new Error(`Employee ${employee.first_name} ${employee.last_name} has invalid payment amount`);
     }
     
@@ -258,7 +258,7 @@ const Groups = () => {
 
       const transferParams = {
         token: tokenType,
-        amount: employee.payment_amount.toString(),
+        amount: parseFloat(employee.payment_amount || '0').toString(),
         chainId: destinationChainId as any,
         recipient: employee.wallet_address as `0x${string}`,
         sourceChains: [11155111] as number[]
@@ -278,7 +278,7 @@ const Groups = () => {
         
         toast({
           title: "🎉 Payment Successful!",
-          description: `Sent ${employee.payment_amount} ${tokenType} to ${employee.first_name} ${employee.last_name}`,
+          description: `Sent ${parseFloat(employee.payment_amount || '0').toFixed(2)} ${tokenType} to ${employee.first_name} ${employee.last_name}`,
         });
 
         // Show transaction in Blockscout if available
@@ -293,16 +293,16 @@ const Groups = () => {
         return { success: true, transactionHash: transferResult.transactionHash };
 
       } else {
-        console.error('Transfer failed:', transferResult.error);
+        console.error('Transfer failed:', transferResult);
         setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'error' }));
         
         toast({
           title: "❌ Payment Failed",
-          description: transferResult.error || "Unknown error occurred during transfer",
+          description: "Unknown error occurred during transfer",
           variant: "destructive",
         });
 
-        return { success: false, error: transferResult.error };
+        return { success: false, error: "Transfer failed" };
       }
 
     } catch (error) {

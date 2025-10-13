@@ -129,7 +129,7 @@ const Home = () => {
     },
     {
       label: "Monthly Payout",
-      value: `$${dashboardStats.monthlyPayout.toLocaleString()}`,
+      value: `$${dashboardStats.monthlyPayout.toFixed(6)}`,
       icon: DollarSign,
       trend: "Total monthly",
       color: "from-green-500 to-emerald-500",
@@ -335,7 +335,7 @@ const Home = () => {
                       <p className="text-sm text-muted-foreground">{group.employees} employees</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-lg font-bold text-primary">${group.payout.toLocaleString()}/mo</p>
+                      <p className="text-lg font-bold text-primary">${group.payout.toFixed(6)}/mo</p>
                       <p className="text-xs text-muted-foreground">{group.status}</p>
                     </div>
                   </motion.div>

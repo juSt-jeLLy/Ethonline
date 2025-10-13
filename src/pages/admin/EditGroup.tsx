@@ -20,7 +20,7 @@ interface Employee {
   wallet_address: string;
   chain: string;
   token: string;
-  payment_amount: number;
+  payment_amount: string; // Changed to string for decimal precision
   payment_frequency: string;
   status: string;
   role: string;
@@ -53,6 +53,19 @@ const EditGroup = () => {
   const { toast } = useToast();
   const { openTxToast } = useNotification();
   const { openPopup } = useTransactionPopup();
+
+  // Convert token amounts to USDC equivalent
+  const convertToUSDC = (amount: number, token: string): number => {
+    const conversionRates: { [key: string]: number } = {
+      'eth': 2000,    // 1 ETH = 2000 USDC (example rate)
+      'usdc': 1,      // 1 USDC = 1 USDC
+      'usdt': 1,      // 1 USDT = 1 USDC (approximate)
+      'dai': 1,       // 1 DAI = 1 USDC (approximate)
+    };
+    
+    const rate = conversionRates[token.toLowerCase()] || 1;
+    return amount * rate;
+  };
 
   const [groupData, setGroupData] = useState<GroupData | null>(null);
   const [groupName, setGroupName] = useState("");
@@ -137,7 +150,7 @@ const EditGroup = () => {
       if (result.success) {
         // Update local state
         setEmployees(employees.map(emp => 
-          emp.employment_id === employmentId ? { ...emp, payment_amount: paymentAmount } : emp
+          emp.employment_id === employmentId ? { ...emp, payment_amount: paymentAmount.toString() } : emp
         ));
         setEditingId(null);
         toast({
@@ -561,7 +574,11 @@ const EditGroup = () => {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold">Employees ({employees.length})</h2>
               <Badge className="bg-primary/20 text-primary">
-                Total: {employees.reduce((acc, emp) => acc + (emp.payment_amount || 0), 0).toLocaleString()} {employees[0]?.token?.toUpperCase() || 'USDC'}
+                Total: ${employees.reduce((acc, emp) => {
+                  const amount = parseFloat(emp.payment_amount || '0');
+                  const token = emp.token || 'usdc';
+                  return acc + convertToUSDC(amount, token);
+                }, 0).toFixed(2)} USDC
               </Badge>
             </div>
 
@@ -623,7 +640,7 @@ const EditGroup = () => {
                             </div>
                           ) : (
                             <div className="font-bold gradient-text">
-                              {emp.payment_amount?.toLocaleString() || 0} {emp.token?.toUpperCase() || 'USDC'}
+                              {parseFloat(emp.payment_amount || '0').toFixed(6)} {emp.token?.toUpperCase() || 'USDC'}
                             </div>
                           )}
                         </div>
@@ -648,7 +665,7 @@ const EditGroup = () => {
                           size="icon"
                           onClick={() => {
                             setEditingId(emp.employment_id);
-                            setEditedPayment(emp.payment_amount?.toString() || '');
+                            setEditedPayment(emp.payment_amount || '');
                           }}
                           className="text-primary hover:bg-primary/10"
                           disabled={isSaving}

@@ -262,7 +262,7 @@ const Employment = () => {
                     {employmentData.paymentFrequency === 'monthly' ? 'Monthly' : 'Payment'} Amount
                   </div>
                   <div className="text-2xl font-bold gradient-text">
-                    {employmentData.monthlyPayment.toLocaleString()} {employmentData.token.toUpperCase()}
+                    {employmentData.monthlyPayment.toFixed(6)} {employmentData.token.toUpperCase()}
                   </div>
                 </div>
 
@@ -414,7 +414,7 @@ const Employment = () => {
                   </p>
                   <div className="mt-4 p-4 bg-blue-50/50 rounded-lg">
                     <p className="text-sm text-blue-700">
-                      <strong>Expected Payment:</strong> {employmentData.monthlyPayment.toLocaleString()} {employmentData.token.toUpperCase()} {employmentData.paymentFrequency}
+                      <strong>Expected Payment:</strong> {employmentData.monthlyPayment.toFixed(6)} {employmentData.token.toUpperCase()} {employmentData.paymentFrequency}
                     </p>
                     <p className="text-xs text-blue-600 mt-1">
                       <strong>Test Employer:</strong> {TEST_EMPLOYER_ADDRESS.slice(0, 10)}...{TEST_EMPLOYER_ADDRESS.slice(-8)}

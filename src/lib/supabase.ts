@@ -33,8 +33,8 @@ export interface Employment {
   employee_id: string
   status: string
   role: string
-  payment_amount?: number
-  payment_frequency?: number
+  payment_amount?: string // Now decimal type - stored as string to preserve precision
+  payment_frequency?: string
   chain?: string
   token?: string
   token_contract?: string

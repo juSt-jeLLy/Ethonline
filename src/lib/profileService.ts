@@ -822,8 +822,12 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
         };
       });
 
-      // Calculate total payment
-      const totalPayment = employees.reduce((sum, emp) => sum + (emp.payment_amount || 0), 0);
+      // Calculate total payment in USDC
+      const totalPayment = employees.reduce((sum, emp) => {
+        const amount = parseFloat(emp.payment_amount || '0');
+        const token = emp.token || 'usdc';
+        return sum + this.convertToUSDC(amount, token);
+      }, 0);
 
       const groupData = {
         id: employer.id,
@@ -843,6 +847,23 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
   }
 
   // Get all payment groups (employments) for a company
+  // Convert token amounts to USDC equivalent
+  static convertToUSDC(amount: number, token: string): number {
+    // Simple conversion rates (in production, you'd fetch these from an API like CoinGecko or CoinMarketCap)
+    // Example: const rates = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum,usd-coin&vs_currencies=usd');
+    const conversionRates: { [key: string]: number } = {
+      'eth': 4000,    // 1 ETH = 2000 USDC (example rate - update with real rate)
+      'usdc': 1,      // 1 USDC = 1 USDC
+      'usdt': 1,      // 1 USDT = 1 USDC (approximate)
+      'dai': 1,       // 1 DAI = 1 USDC (approximate)
+      'weth': 4000,   // Wrapped ETH same as ETH
+      'matic': 0.5,   // 1 MATIC = 0.5 USDC (example rate)
+    };
+    
+    const rate = conversionRates[token.toLowerCase()] || 1;
+    return amount * rate;
+  }
+
   static async getPaymentGroups(employerId?: string) {
     try {
       let query = supabase
@@ -908,8 +929,11 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
           role: employment.role
         });
         
-        // Sum up total payments
-        group.totalPayment += employment.payment_amount || 0;
+        // Convert to USDC and sum up total payments
+        const paymentAmount = parseFloat(employment.payment_amount || '0');
+        const token = employment.token || 'usdc';
+        const usdcAmount = this.convertToUSDC(paymentAmount, token);
+        group.totalPayment += usdcAmount;
       });
 
       // Convert map to array and format the data
@@ -918,7 +942,7 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
         name: group.name,
         employer: group.employer,
         employees: group.employees.length,
-        totalPayment: `${group.totalPayment.toLocaleString()} ${group.employees[0]?.token?.toUpperCase() || 'USDC'}`,
+        totalPayment: `$${group.totalPayment.toFixed(2)} USDC`,
         nextPayment: group.nextPayment,
         status: group.status,
         created_at: group.created_at,
@@ -1031,7 +1055,7 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
           employee_id: employeeId,
           status: 'active',
           role: 'employee',
-          payment_amount: parseFloat(employee.payment) || 0,
+          payment_amount: (parseFloat(employee.payment) || 0).toString(),
           payment_frequency: 'monthly', // Default frequency, can be made dynamic
           chain: employee.chain || 'ethereum',
           token: employee.token || 'usdc',
@@ -1131,7 +1155,7 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
       const { data, error } = await supabase
         .from('employments')
         .update({
-          payment_amount: paymentAmount,
+          payment_amount: paymentAmount.toString(), // Convert to string for decimal storage
           updated_at: new Date().toISOString()
         })
         .eq('id', employmentId)
@@ -1238,7 +1262,7 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
         employee_id: employeeId,
         status: 'active',
         role: 'employee',
-        payment_amount: parseFloat(data.employeeData.payment) || 0,
+        payment_amount: (parseFloat(data.employeeData.payment) || 0).toString(),
         payment_frequency: 'monthly', // Default frequency
         chain: data.employeeData.chain || 'ethereum',
         token: data.employeeData.token || 'usdc',
@@ -1406,9 +1430,15 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
     try {
       console.log('Fetching transactions for employer:', employerAddress);
       
-      // Use Ethereum mainnet Blockscout API
+      // Use Blockscout API with API key as query parameter
+      const apiKey = import.meta.env.VITE_BLOCKSCOUT_API_KEY;
+      
+      if (!apiKey) {
+        throw new Error('VITE_BLOCKSCOUT_API_KEY is not set in environment variables');
+      }
+      
       const response = await fetch(
-        `https://eth.blockscout.com/api/v2/addresses/${employerAddress}/transactions?filter=to&limit=${limit}`
+        `https://eth.blockscout.com/api?module=account&action=txlist&address=${employerAddress}&startblock=0&endblock=99999999&page=1&offset=${limit}&sort=desc&apikey=${apiKey}`
       );
       
       if (!response.ok) {
@@ -1417,20 +1447,20 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
       
       const data = await response.json();
       
-      // Format the transaction data
-      const formattedTransactions = data.items?.map((tx: any) => ({
+      // Format the transaction data from Blockscout API response
+      const formattedTransactions = data.result?.map((tx: any) => ({
         hash: tx.hash,
-        timestamp: tx.timestamp,
+        timestamp: tx.timeStamp,
         value: tx.value,
-        valueFormatted: tx.value_formatted,
+        valueFormatted: (parseInt(tx.value) / Math.pow(10, 18)).toFixed(6) + ' ETH', // Convert wei to ETH
         from: tx.from,
         to: tx.to,
-        status: tx.status,
-        method: tx.method,
-        gasUsed: tx.gas_used,
-        gasPrice: tx.gas_price,
-        blockNumber: tx.block_number,
-        transactionIndex: tx.position
+        status: tx.isError === '0' ? 'success' : 'failed',
+        method: tx.methodId,
+        gasUsed: tx.gasUsed,
+        gasPrice: tx.gasPrice,
+        blockNumber: parseInt(tx.blockNumber),
+        transactionIndex: parseInt(tx.transactionIndex)
       })) || [];
 
       return {
@@ -1448,9 +1478,15 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
     try {
       console.log('Fetching payment transactions for employee:', employeeWallet);
       
-      // Get all transactions for the employee wallet
+      // Use Blockscout API with API key as query parameter
+      const apiKey = import.meta.env.VITE_BLOCKSCOUT_API_KEY;
+      
+      if (!apiKey) {
+        throw new Error('VITE_BLOCKSCOUT_API_KEY is not set in environment variables');
+      }
+      
       const response = await fetch(
-        `https://eth.blockscout.com/api/v2/addresses/${employeeWallet}/transactions?filter=to&limit=${limit}`
+        `https://eth.blockscout.com/api?module=account&action=txlist&address=${employeeWallet}&startblock=0&endblock=99999999&page=1&offset=${limit}&sort=desc&apikey=${apiKey}`
       );
       
       if (!response.ok) {
@@ -1460,21 +1496,21 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
       const data = await response.json();
       
       // Filter for transactions from the employer (payments)
-      const paymentTransactions = data.items?.filter((tx: any) => 
+      const paymentTransactions = data.result?.filter((tx: any) => 
         tx.from?.toLowerCase() === employerAddress.toLowerCase() &&
-        tx.value > 0 &&
-        tx.status === 'success'
+        parseInt(tx.value) > 0 &&
+        tx.isError === '0'
       ).map((tx: any) => ({
         hash: tx.hash,
-        timestamp: tx.timestamp,
+        timestamp: tx.timeStamp,
         value: tx.value,
-        valueFormatted: tx.value_formatted,
+        valueFormatted: (parseInt(tx.value) / Math.pow(10, 18)).toFixed(6) + ' ETH',
         from: tx.from,
         to: tx.to,
-        status: tx.status,
-        method: tx.method,
-        gasUsed: tx.gas_used,
-        blockNumber: tx.block_number,
+        status: tx.isError === '0' ? 'success' : 'failed',
+        method: tx.methodId,
+        gasUsed: tx.gasUsed,
+        blockNumber: parseInt(tx.blockNumber),
         isPayment: true
       })) || [];
 
@@ -1733,7 +1769,7 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
 
       // Calculate total potential earnings (from employment records)
       const totalPotentialEarnings = employmentData.reduce((sum, employment) => {
-        return sum + (employment.payment_amount || 0);
+        return sum + parseFloat(employment.payment_amount || '0');
       }, 0);
 
       // Get next payment info (simplified - could be enhanced with actual payment schedules)
@@ -1751,7 +1787,7 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
           const employer = Array.isArray(employment.employers) ? employment.employers[0] : employment.employers;
           return {
             title: employment.status === 'active' ? 'Active Employment' : 'Contract Ended',
-            amount: `$${employment.payment_amount || 0}`,
+            amount: `$${parseFloat(employment.payment_amount || '0').toFixed(2)}`,
             date: new Date(employment.created_at || 0).toLocaleDateString(),
             company: employer?.name || 'Unknown Company'
           };
@@ -1764,7 +1800,7 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
         activeContracts: activeContractsWithPayments, // Employment relationships with actual payments
         nextPayment: nextPayment ? {
           days: 5, // Simplified - could calculate actual days
-          amount: nextPayment.payment_amount || 0
+          amount: parseFloat(nextPayment.payment_amount || '0')
         } : null,
         recentActivity
       };
