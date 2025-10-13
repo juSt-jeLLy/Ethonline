@@ -16,6 +16,7 @@ interface Group {
   name: string;
   employees: number;
   totalPayment: string;
+  totalPaymentUSDC: number;
   nextPayment: string;
   status: string;
   created_at?: string;
@@ -66,6 +67,14 @@ const TOKEN_MAPPING: { [key: string]: 'USDC' | 'USDT' | 'ETH' } = {
   'ethereum': 'ETH'
 };
 
+// Conversion rates to USDC (for demo purposes - in production use real price feeds)
+const TOKEN_CONVERSION_RATES: { [key: string]: number } = {
+  'usdc': 1,
+  'usdt': 1,
+  'eth': 4000, // 1 ETH = 4000 USDC
+  'ethereum': 4000,
+};
+
 const Groups = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -77,6 +86,21 @@ const Groups = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<{ [key: string]: 'success' | 'error' | 'processing' }>({});
+
+  // Helper function to convert token amounts to USDC equivalent
+  const convertToUSDC = (amount: number, token: string): number => {
+    const normalizedToken = token.toLowerCase();
+    const rate = TOKEN_CONVERSION_RATES[normalizedToken] || 1;
+    return amount * rate;
+  };
+
+  // Helper function to format total payment display
+  const formatTotalPayment = (group: Group): string => {
+    if (group.totalPaymentUSDC) {
+      return `${Math.round(group.totalPaymentUSDC).toLocaleString()} USDC`;
+    }
+    return group.totalPayment; // Fallback to original if no USDC conversion
+  };
 
   // Load groups from database - NO MOCK DATA
   useEffect(() => {
@@ -119,13 +143,14 @@ const Groups = () => {
     loadGroups();
   }, [toast]);
 
-  // Function to fetch wallet data for employees
+  // Function to fetch wallet data for employees and calculate proper totals
   const processGroupsWithWalletData = async (groups: Group[]) => {
     const processedGroups = [];
     
     for (const group of groups) {
       if (group.employeeDetails && group.employeeDetails.length > 0) {
         const employeesWithWallets = [];
+        let totalUSDC = 0;
         
         for (const employee of group.employeeDetails) {
           try {
@@ -133,13 +158,18 @@ const Groups = () => {
             const walletResult = await ProfileService.getEmployeeWalletData(employee.id, employee.employment_id);
             
             if (walletResult.success && walletResult.data) {
-              employeesWithWallets.push({
+              const employeeWithWallet = {
                 ...employee,
                 wallet_address: walletResult.data.account_address || '',
                 chain: walletResult.data.chain || employee.chain || 'ethereum',
                 token: walletResult.data.token || employee.token || 'usdc',
                 payment_amount: employee.payment_amount || 0
-              });
+              };
+              
+              employeesWithWallets.push(employeeWithWallet);
+              
+              // Add to USDC total
+              totalUSDC += convertToUSDC(employee.payment_amount || 0, employee.token);
             } else {
               // If no wallet found, use employee data but mark as invalid for payment
               employeesWithWallets.push({
@@ -147,6 +177,9 @@ const Groups = () => {
                 wallet_address: '',
                 payment_amount: employee.payment_amount || 0
               });
+              
+              // Still add to USDC total for accurate reporting
+              totalUSDC += convertToUSDC(employee.payment_amount || 0, employee.token);
             }
           } catch (error) {
             console.error(`Error fetching wallet for employee ${employee.id}:`, error);
@@ -155,15 +188,22 @@ const Groups = () => {
               wallet_address: '',
               payment_amount: employee.payment_amount || 0
             });
+            
+            // Still add to USDC total for accurate reporting
+            totalUSDC += convertToUSDC(employee.payment_amount || 0, employee.token);
           }
         }
         
         processedGroups.push({
           ...group,
-          employeeDetails: employeesWithWallets
+          employeeDetails: employeesWithWallets,
+          totalPaymentUSDC: totalUSDC
         });
       } else {
-        processedGroups.push(group);
+        processedGroups.push({
+          ...group,
+          totalPaymentUSDC: 0
+        });
       }
     }
     
@@ -489,7 +529,9 @@ const Groups = () => {
                             <DollarSign className="h-4 w-4" />
                             Total Payment
                           </div>
-                          <div className="font-bold gradient-text">{group.totalPayment}</div>
+                          <div className="font-bold gradient-text">
+                            {formatTotalPayment(group)}
+                          </div>
                         </div>
 
                         <div className="flex items-center justify-between">
