@@ -1,8 +1,9 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Users, Shield, Wallet } from "lucide-react";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { ConnectKitButton } from "connectkit";
 import { useAccount } from "wagmi";
 import { useEffect } from "react";
 
@@ -73,7 +74,7 @@ const Landing = () => {
 
       {/* Wallet Connection in Top Right */}
       <div className="absolute top-6 right-6 z-20">
-        <ConnectButton />
+        <ConnectKitButton />
       </div>
 
       <div className="relative z-10 container mx-auto px-6 py-20">
@@ -111,12 +112,12 @@ const Landing = () => {
             className="grid md:grid-cols-2 gap-8 mt-16"
           >
             {/* Employee Card */}
-            <ConnectButton.Custom>
-              {({ openConnectModal }) => (
+            <ConnectKitButton.Custom>
+              {({ isConnected, show, truncatedAddress, ensName }) => (
                 <motion.div whileHover={{ scale: 1.03 }} className="h-full">
                   <Card 
                     className="glass-card p-8 h-full hover-lift cursor-pointer group" 
-                    onClick={isConnected ? handleEmployeeClick : openConnectModal}
+                    onClick={isConnected ? handleEmployeeClick : show}
                   >
                     <div className="space-y-6">
                       <motion.div
@@ -132,25 +133,25 @@ const Landing = () => {
                           Manage your profile, view employment status, and track your payments
                         </p>
                       </div>
-                      <button
+                      <Button
                         className="w-full px-6 py-3 bg-gradient-to-r from-primary to-blue-500 text-white rounded-lg font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
                       >
                         <Wallet className="h-4 w-4" />
                         {isConnected ? "Enter Dashboard" : "Connect Wallet"}
-                      </button>
+                      </Button>
                     </div>
                   </Card>
                 </motion.div>
               )}
-            </ConnectButton.Custom>
+            </ConnectKitButton.Custom>
 
             {/* Admin Card */}
-            <ConnectButton.Custom>
-              {({ openConnectModal }) => (
+            <ConnectKitButton.Custom>
+              {({ isConnected, show, truncatedAddress, ensName }) => (
                 <motion.div whileHover={{ scale: 1.03 }} className="h-full">
                   <Card 
                     className="glass-card p-8 h-full hover-lift cursor-pointer group" 
-                    onClick={isConnected ? handleAdminClick : openConnectModal}
+                    onClick={isConnected ? handleAdminClick : show}
                   >
                     <div className="space-y-6">
                       <motion.div
@@ -166,17 +167,17 @@ const Landing = () => {
                           Create groups, manage employees, and process payments seamlessly
                         </p>
                       </div>
-                      <button
+                      <Button
                         className="w-full px-6 py-3 bg-gradient-to-r from-primary to-cyan-500 text-white rounded-lg font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
                       >
                         <Wallet className="h-4 w-4" />
                         {isConnected ? "Enter Dashboard" : "Connect Wallet"}
-                      </button>
+                      </Button>
                     </div>
                   </Card>
                 </motion.div>
               )}
-            </ConnectButton.Custom>
+            </ConnectKitButton.Custom>
           </motion.div>
 
           {/* Features */}

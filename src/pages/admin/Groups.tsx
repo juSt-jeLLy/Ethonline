@@ -5,10 +5,11 @@ import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, DollarSign, Calendar, Edit, Send, Loader2, ExternalLink } from "lucide-react";
+import { Building2, Users, DollarSign, Calendar, Edit, Send, Loader2, ExternalLink, CheckCircle, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNotification, useTransactionPopup } from "@blockscout/app-sdk";
 import { ProfileService } from "@/lib/profileService";
+import { useNexus } from '@/providers/NexusProvider';
 
 interface Group {
   id: string;
@@ -34,74 +35,80 @@ interface Group {
     token: string;
     status: string;
     role: string;
+    wallet_address: string;
+    employment_id?: string;
   }>;
 }
+
+// Chain mapping from database names to Nexus SDK chain IDs
+const CHAIN_MAPPING: { [key: string]: number } = {
+  'optimism': 11155420, // Optimism Sepolia
+  'ethereum': 11155111, // Sepolia
+  'polygon': 80002,     // Polygon Amoy
+  'arbitrum': 421614,   // Arbitrum Sepolia
+  'base': 84532,        // Base Sepolia
+  'monad': 1014,        // Monad Testnet
+  // Add aliases for different naming conventions
+  'optimism-sepolia': 11155420,
+  'op-sepolia': 11155420,
+  'sepolia': 11155111,
+  'polygon-amoy': 80002,
+  'arbitrum-sepolia': 421614,
+  'base-sepolia': 84532,
+  'monad-testnet': 1014
+};
+
+// Token mapping to ensure correct token types
+const TOKEN_MAPPING: { [key: string]: 'USDC' | 'USDT' | 'ETH' } = {
+  'usdc': 'USDC',
+  'usdt': 'USDT', 
+  'eth': 'ETH',
+  'ethereum': 'ETH'
+};
 
 const Groups = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { openTxToast } = useNotification();
   const { openPopup } = useTransactionPopup();
+  const { nexusSDK, isInitialized } = useNexus();
+  
   const [groups, setGroups] = useState<Group[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<{ [key: string]: 'success' | 'error' | 'processing' }>({});
 
-  // Mock data as fallback
-  const mockGroups: Group[] = [
-    {
-      id: "mock-1",
-      name: "Engineering Team Q1",
-      employees: 12,
-      totalPayment: "24,000 USDC",
-      nextPayment: "March 31, 2025",
-      status: "Active",
-    },
-    {
-      id: "mock-2", 
-      name: "Marketing Department",
-      employees: 8,
-      totalPayment: "16,000 USDC",
-      nextPayment: "March 31, 2025",
-      status: "Active",
-    },
-    {
-      id: "mock-3",
-      name: "Sales Team",
-      employees: 15,
-      totalPayment: "30,000 USDC",
-      nextPayment: "March 31, 2025",
-      status: "Active",
-    },
-  ];
-
-  // Load groups from database
+  // Load groups from database - NO MOCK DATA
   useEffect(() => {
     const loadGroups = async () => {
       setIsLoading(true);
       try {
         const result = await ProfileService.getPaymentGroups();
-        if (result.success && result.data.length > 0) {
-          setGroups(result.data);
-          console.log('Loaded groups from database:', result.data);
+        console.log('Raw groups data from database:', result);
+        
+        if (result.success && result.data && result.data.length > 0) {
+          // Process the groups to ensure we have proper employee details with wallet addresses
+          const processedGroups = await processGroupsWithWalletData(result.data);
+          setGroups(processedGroups);
+          console.log('Processed groups with wallet data:', processedGroups);
         } else {
-          // Use mock data if no real data or error
-          setGroups(mockGroups);
-          console.log('Using mock groups data');
+          setGroups([]);
+          console.log('No groups found in database');
           if (result.error) {
             console.error('Error loading groups:', result.error);
             toast({
-              title: "Warning",
-              description: "Using sample data. Check database connection.",
+              title: "Error",
+              description: "Failed to load groups from database",
               variant: "destructive",
             });
           }
         }
       } catch (error) {
         console.error('Error loading groups:', error);
-        setGroups(mockGroups);
+        setGroups([]);
         toast({
           title: "Error",
-          description: "Failed to load groups. Using sample data.",
+          description: "Failed to load groups from database",
           variant: "destructive",
         });
       } finally {
@@ -110,31 +117,258 @@ const Groups = () => {
     };
 
     loadGroups();
-  }, []);
+  }, [toast]);
 
-  const handlePayGroup = async (group: Group) => {
+  // Function to fetch wallet data for employees
+  const processGroupsWithWalletData = async (groups: Group[]) => {
+    const processedGroups = [];
+    
+    for (const group of groups) {
+      if (group.employeeDetails && group.employeeDetails.length > 0) {
+        const employeesWithWallets = [];
+        
+        for (const employee of group.employeeDetails) {
+          try {
+            // Fetch wallet data for this employee
+            const walletResult = await ProfileService.getEmployeeWalletData(employee.id, employee.employment_id);
+            
+            if (walletResult.success && walletResult.data) {
+              employeesWithWallets.push({
+                ...employee,
+                wallet_address: walletResult.data.account_address || '',
+                chain: walletResult.data.chain || employee.chain || 'ethereum',
+                token: walletResult.data.token || employee.token || 'usdc',
+                payment_amount: employee.payment_amount || 0
+              });
+            } else {
+              // If no wallet found, use employee data but mark as invalid for payment
+              employeesWithWallets.push({
+                ...employee,
+                wallet_address: '',
+                payment_amount: employee.payment_amount || 0
+              });
+            }
+          } catch (error) {
+            console.error(`Error fetching wallet for employee ${employee.id}:`, error);
+            employeesWithWallets.push({
+              ...employee,
+              wallet_address: '',
+              payment_amount: employee.payment_amount || 0
+            });
+          }
+        }
+        
+        processedGroups.push({
+          ...group,
+          employeeDetails: employeesWithWallets
+        });
+      } else {
+        processedGroups.push(group);
+      }
+    }
+    
+    return processedGroups;
+  };
+
+  const getChainId = (chainName: string): number => {
+    const normalizedChain = chainName.toLowerCase().trim();
+    return CHAIN_MAPPING[normalizedChain] || 11155420; // Default to Optimism Sepolia
+  };
+
+  const getTokenType = (tokenName: string): 'USDC' | 'USDT' | 'ETH' => {
+    const normalizedToken = tokenName.toLowerCase().trim();
+    return TOKEN_MAPPING[normalizedToken] || 'USDC'; // Default to USDC
+  };
+
+  const validateEmployeeData = (employee: any) => {
+    if (!employee.wallet_address || employee.wallet_address.trim() === '') {
+      throw new Error(`Employee ${employee.first_name} ${employee.last_name} has no wallet address`);
+    }
+    
+    if (!employee.payment_amount || employee.payment_amount <= 0) {
+      throw new Error(`Employee ${employee.first_name} ${employee.last_name} has invalid payment amount`);
+    }
+    
+    if (!employee.wallet_address.startsWith('0x') || employee.wallet_address.length !== 42) {
+      throw new Error(`Employee ${employee.first_name} ${employee.last_name} has invalid wallet address format`);
+    }
+  };
+
+  const handlePayEmployee = async (group: Group, employee: any) => {
+    if (!nexusSDK || !isInitialized) {
+      toast({
+        title: "Nexus SDK Not Ready",
+        description: "Please wait for Nexus SDK to initialize.",
+        variant: "destructive",
+      });
+      return { success: false, error: "Nexus SDK not ready" };
+    }
+
+    const paymentKey = `${group.id}-${employee.id}`;
+    setIsProcessingPayment(paymentKey);
+    setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'processing' }));
+
+    try {
+      // Validate employee data before processing
+      validateEmployeeData(employee);
+
+      // Use actual employee data from database with proper chain mapping
+      const destinationChainId = getChainId(employee.chain);
+      const tokenType = getTokenType(employee.token);
+
+      const transferParams = {
+        token: tokenType,
+        amount: employee.payment_amount.toString(),
+        chainId: destinationChainId as any,
+        recipient: employee.wallet_address as `0x${string}`,
+        sourceChains: [11155111] as number[]
+      };
+
+      console.log('Transfer Parameters:', transferParams);
+      console.log('Employee Data:', employee);
+
+      // Execute the transfer
+      console.log('Executing transfer...');
+      const transferResult = await nexusSDK.transfer(transferParams);
+
+      console.log('Transfer Result:', transferResult);
+
+      if (transferResult.success) {
+        setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'success' }));
+        
+        toast({
+          title: "🎉 Payment Successful!",
+          description: `Sent ${employee.payment_amount} ${tokenType} to ${employee.first_name} ${employee.last_name}`,
+        });
+
+        // Show transaction in Blockscout if available
+        if (transferResult.transactionHash) {
+          try {
+            await openTxToast(destinationChainId.toString(), transferResult.transactionHash);
+          } catch (txError) {
+            console.log('Could not open transaction toast:', txError);
+          }
+        }
+
+        return { success: true, transactionHash: transferResult.transactionHash };
+
+      } else {
+        console.error('Transfer failed:', transferResult.error);
+        setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'error' }));
+        
+        toast({
+          title: "❌ Payment Failed",
+          description: transferResult.error || "Unknown error occurred during transfer",
+          variant: "destructive",
+        });
+
+        return { success: false, error: transferResult.error };
+      }
+
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'error' }));
+      
+      const errorMessage = error instanceof Error ? error.message : "Failed to process payment";
+      
+      toast({
+        title: "💸 Payment Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+
+      return { success: false, error: errorMessage };
+    } finally {
+      setIsProcessingPayment(null);
+    }
+  };
+
+  const handlePayAllEmployees = async (group: Group) => {
+    if (!group.employeeDetails || group.employeeDetails.length === 0) {
+      toast({
+        title: "No Employees",
+        description: "This group has no employees to pay.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Filter out employees without valid wallet addresses
+    const validEmployees = group.employeeDetails.filter(emp => 
+      emp.wallet_address && 
+      emp.wallet_address.trim() !== '' && 
+      emp.payment_amount && 
+      emp.payment_amount > 0
+    );
+
+    if (validEmployees.length === 0) {
+      toast({
+        title: "No Valid Employees",
+        description: "No employees in this group have valid wallet addresses or payment amounts.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (validEmployees.length < group.employeeDetails.length) {
+      toast({
+        title: "Some Employees Skipped",
+        description: `${group.employeeDetails.length - validEmployees.length} employees skipped due to missing wallet addresses or payment amounts.`,
+        variant: "default",
+      });
+    }
+
     setIsProcessingPayment(group.id);
     
     try {
-      // Use a known successful transaction hash for demonstration
-      // This is a real successful transaction on Ethereum mainnet
-      const knownGoodTxHash = "0x5c504ed432cb51138bcf09aa5e8a410dd4a1e204ef84bfed1be16dfba1b22060";
-      
-      // Show initial toast
-      toast({
-        title: "Payment Initiated",
-        description: `Processing payments for ${group.name}`,
-      });
+      let successfulPayments = 0;
+      let failedPayments = 0;
 
-      // Use Blockscout SDK to show transaction toast
-      // Using Ethereum mainnet (chain ID "1") for demo
-      await openTxToast("1", knownGoodTxHash);
-      
+      // Process payments for VALID employees in the group ONE BY ONE
+      for (let i = 0; i < validEmployees.length; i++) {
+        const employee = validEmployees[i];
+        console.log(`Processing payment ${i + 1}/${validEmployees.length} for:`, employee.first_name, employee.last_name);
+        
+        // Show progress toast
+        toast({
+          title: "Processing Payments",
+          description: `Processing payment ${i + 1}/${validEmployees.length} for ${employee.first_name} ${employee.last_name}`,
+        });
+
+        // Wait for the current payment to complete before starting the next
+        const result = await handlePayEmployee(group, employee);
+        
+        if (result.success) {
+          successfulPayments++;
+        } else {
+          failedPayments++;
+        }
+
+        // Wait 2 seconds before processing next employee (even if previous failed)
+        if (i < validEmployees.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+
+      // Show final summary
+      if (failedPayments === 0) {
+        toast({
+          title: "✅ All Payments Complete",
+          description: `Successfully processed all ${successfulPayments} payments in ${group.name}`,
+        });
+      } else {
+        toast({
+          title: "⚠️ Payments Partially Complete",
+          description: `Completed ${successfulPayments} payments, ${failedPayments} failed in ${group.name}`,
+          variant: "destructive",
+        });
+      }
+
     } catch (error) {
-      console.error('Error processing payment:', error);
+      console.error('Error in batch payment:', error);
       toast({
-        title: "Payment Error",
-        description: "Failed to process payment. Please try again.",
+        title: "Batch Payment Error",
+        description: "Failed to process batch payment for all employees",
         variant: "destructive",
       });
     } finally {
@@ -143,10 +377,13 @@ const Groups = () => {
   };
 
   const handleViewTransactionHistory = () => {
-    // Open transaction history popup for Ethereum mainnet
     openPopup({
-      chainId: "1", // Ethereum mainnet
+      chainId: "11155420",
     });
+  };
+
+  const getPaymentStatus = (groupId: string, employeeId: string) => {
+    return paymentStatus[`${groupId}-${employeeId}`];
   };
 
   return (
@@ -271,20 +508,30 @@ const Groups = () => {
                           onClick={() => navigate(`/admin/edit-group/${group.id}`)}
                         >
                           <Edit className="mr-2 h-4 w-4" />
-                          Edit
+                          Edit Group
                         </Button>
-                      <Button
-                        className="flex-1 bg-gradient-to-r from-primary to-cyan-500 hover:opacity-90"
-                        onClick={() => handlePayGroup(group)}
-                        disabled={isProcessingPayment === group.id}
-                      >
-                        {isProcessingPayment === group.id ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Send className="mr-2 h-4 w-4" />
-                        )}
-                        {isProcessingPayment === group.id ? "Processing..." : "Pay"}
-                      </Button>
+                        <Button
+                          className="flex-1 bg-gradient-to-r from-primary to-cyan-500 hover:opacity-90"
+                          onClick={() => handlePayAllEmployees(group)}
+                          disabled={
+                            isProcessingPayment === group.id || 
+                            !group.employeeDetails || 
+                            group.employeeDetails.length === 0 ||
+                            group.employeeDetails.filter(emp => 
+                              emp.wallet_address && 
+                              emp.wallet_address.trim() !== '' && 
+                              emp.payment_amount && 
+                              emp.payment_amount > 0
+                            ).length === 0
+                          }
+                        >
+                          {isProcessingPayment === group.id ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="mr-2 h-4 w-4" />
+                          )}
+                          {isProcessingPayment === group.id ? "Processing..." : "Pay All"}
+                        </Button>
                       </div>
                     </div>
                   </Card>

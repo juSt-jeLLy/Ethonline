@@ -281,11 +281,11 @@ const Profile = () => {
                         <SelectValue placeholder="Select chain" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="ethereum">Ethereum</SelectItem>
-                        <SelectItem value="polygon">Polygon</SelectItem>
-                        <SelectItem value="arbitrum">Arbitrum</SelectItem>
-                        <SelectItem value="optimism">Optimism</SelectItem>
-                        <SelectItem value="base">Base</SelectItem>
+                        <SelectItem value="ethereum">Sepolia</SelectItem>
+                        <SelectItem value="polygon">Amoy</SelectItem>
+                        <SelectItem value="arbitrum">Arbitrum Sepolia</SelectItem>
+                        <SelectItem value="optimism">Op Sepolia</SelectItem>
+                        <SelectItem value="base">Base Sepolia</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -302,7 +302,6 @@ const Profile = () => {
                       <SelectContent>
                         <SelectItem value="usdc">USDC</SelectItem>
                         <SelectItem value="usdt">USDT</SelectItem>
-                        <SelectItem value="dai">DAI</SelectItem>
                         <SelectItem value="eth">ETH</SelectItem>
                       </SelectContent>
                     </Select>
