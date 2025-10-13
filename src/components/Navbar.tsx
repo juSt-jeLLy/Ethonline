@@ -1,10 +1,10 @@
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Wallet, LogOut } from "lucide-react";
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount } from 'wagmi';
-import { useNexus, type EthereumProvider } from '@avail-project/nexus-widgets';
+import { Wallet, LogOut, AlertCircle } from "lucide-react";
+import { ConnectKitButton } from "connectkit";
+import { useAccount, useSwitchChain } from 'wagmi';
+import { useNexus } from '@/providers/NexusProvider';
 import { useEffect } from 'react';
 
 interface NavbarProps {
@@ -13,8 +13,9 @@ interface NavbarProps {
 
 export const Navbar = ({ role }: NavbarProps) => {
   const location = useLocation();
-  const { address, status, connector } = useAccount();
-  const { setProvider, provider, isSdkInitialized, deinitializeSdk } = useNexus();
+  const { isConnected, connector, address, chain } = useAccount();
+  const { switchChain } = useSwitchChain();
+  const { handleInit, isInitialized, isLoading, error } = useNexus();
 
   const employeeLinks = [
     { path: "/employee/home", label: "Home" },
@@ -31,26 +32,20 @@ export const Navbar = ({ role }: NavbarProps) => {
 
   const links = role === "employee" ? employeeLinks : adminLinks;
 
-  // Setup Nexus provider when wallet connects
-  const setupProvider = async () => {
-    try {
-      const ethProvider = await connector?.getProvider();
-      if (!ethProvider) return;
-      setProvider(ethProvider as EthereumProvider);
-    } catch (error) {
-      console.error('Failed to setup provider:', error);
-    }
-  };
+  const testnetChainIds = [11155111, 84532, 421614, 11155420, 80002];
+  const isOnTestnet = chain && testnetChainIds.includes(chain.id);
 
+  // Auto-initialize Nexus when wallet connects to testnet
   useEffect(() => {
-    if (!provider && status === 'connected') {
-      setupProvider();
+    if (isConnected && connector && address && isOnTestnet && !isInitialized && !isLoading) {
+      console.log('Auto-initializing Nexus SDK on TESTNET...');
+      handleInit();
     }
-    if (isSdkInitialized && provider && status === 'disconnected') {
-      console.log('Deinitializing Nexus SDK');
-      deinitializeSdk();
-    }
-  }, [status, provider, isSdkInitialized]);
+  }, [isConnected, connector, address, isOnTestnet, isInitialized, isLoading, handleInit]);
+
+  const switchToSepolia = () => {
+    switchChain({ chainId: 11155111 });
+  };
 
   return (
     <motion.nav
@@ -105,104 +100,45 @@ export const Navbar = ({ role }: NavbarProps) => {
           </div>
 
           <div className="flex items-center gap-3">
-            <ConnectButton.Custom>
-              {({
-                account,
-                chain,
-                openAccountModal,
-                openChainModal,
-                openConnectModal,
-                authenticationStatus,
-                mounted,
-              }) => {
-                const ready = mounted && authenticationStatus !== 'loading';
-                const connected =
-                  ready &&
-                  account &&
-                  chain &&
-                  (!authenticationStatus || authenticationStatus === 'authenticated');
-
-                return (
-                  <div
-                    {...(!ready && {
-                      'aria-hidden': true,
-                      style: {
-                        opacity: 0,
-                        pointerEvents: 'none',
-                        userSelect: 'none',
-                      },
-                    })}
+            {/* Network Warning */}
+            {isConnected && !isOnTestnet && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-100 text-yellow-800 border border-yellow-200">
+                <AlertCircle className="h-4 w-4" />
+                <div className="flex flex-col">
+                  <span className="text-xs font-medium">Switch to Testnet</span>
+                  <Button 
+                    variant="link" 
+                    size="sm" 
+                    className="h-auto p-0 text-xs text-yellow-800"
+                    onClick={switchToSepolia}
                   >
-                    {(() => {
-                      if (!connected) {
-                        return (
-                          <Button 
-                            onClick={openConnectModal}
-                            className="bg-gradient-to-r from-primary to-blue-500 hover:opacity-90"
-                          >
-                            <Wallet className="mr-2 h-4 w-4" />
-                            Connect Wallet
-                          </Button>
-                        );
-                      }
+                    Switch to Sepolia
+                  </Button>
+                </div>
+              </div>
+            )}
 
-                      if (chain.unsupported) {
-                        return (
-                          <Button
-                            onClick={openChainModal}
-                            variant="destructive"
-                          >
-                            Wrong network
-                          </Button>
-                        );
-                      }
-
-                      return (
-                        <div className="flex items-center gap-2">
-                          {chain.hasIcon && (
-                            <Button
-                              onClick={openChainModal}
-                              variant="outline"
-                              size="sm"
-                              className="gap-2"
-                            >
-                              <div
-                                style={{
-                                  background: chain.iconBackground,
-                                  width: 20,
-                                  height: 20,
-                                  borderRadius: 999,
-                                  overflow: 'hidden',
-                                }}
-                              >
-                                {chain.iconUrl && (
-                                  <img
-                                    alt={chain.name ?? 'Chain icon'}
-                                    src={chain.iconUrl}
-                                    style={{ width: 20, height: 20 }}
-                                  />
-                                )}
-                              </div>
-                              {chain.name}
-                            </Button>
-                          )}
-
-                          <div 
-                            onClick={openAccountModal}
-                            className="glass-card px-4 py-2 flex items-center gap-2 cursor-pointer hover:bg-accent transition-colors"
-                          >
-                            <Wallet className="h-4 w-4 text-primary" />
-                            <span className="text-sm font-mono">
-                              {account.displayName}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
+            {/* ConnectKit Button */}
+            <ConnectKitButton.Custom>
+              {({ isConnected, isConnecting, show, address, ensName }) => {
+                return (
+                  <Button 
+                    onClick={show}
+                    className="bg-gradient-to-r from-primary to-blue-500 hover:opacity-90 transition-opacity"
+                    disabled={isConnecting}
+                  >
+                    <Wallet className="mr-2 h-4 w-4" />
+                    {isConnected ? (
+                      <span className="font-mono">
+                        {ensName || `${address?.slice(0, 6)}...${address?.slice(-4)}`}
+                      </span>
+                    ) : (
+                      "Connect Wallet"
+                    )}
+                  </Button>
                 );
               }}
-            </ConnectButton.Custom>
+            </ConnectKitButton.Custom>
 
             <Button variant="ghost" size="icon" title="Logout">
               <LogOut className="h-4 w-4" />

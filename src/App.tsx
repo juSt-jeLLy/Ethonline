@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { NotificationProvider, TransactionPopupProvider } from "@blockscout/app-sdk";
 import Web3Provider from "@/providers/Web3Provider";
-import { WalletGuard } from "@/components/WalletGuard";
+
 import Landing from "./pages/Landing";
 import EmployeeHome from "./pages/employee/Home";
 import EmployeeProfile from "./pages/employee/Profile";
@@ -35,25 +35,25 @@ const App = () => (
                 <Route 
                   path="/employee/home" 
                   element={
-                    <WalletGuard>
+                  
                       <EmployeeHome />
-                    </WalletGuard>
+                 
                   } 
                 />
                 <Route 
                   path="/employee/employment" 
                   element={
-                    <WalletGuard>
+                   
                       <Employment />
-                    </WalletGuard>
+                    
                   } 
                 />
                 <Route 
                   path="/employee/profile" 
                   element={
-                    <WalletGuard>
+                   
                       <EmployeeProfile />
-                    </WalletGuard>
+                    
                   } 
                 />
                 
@@ -61,41 +61,41 @@ const App = () => (
                 <Route 
                   path="/admin/home" 
                   element={
-                    <WalletGuard>
+                   
                       <AdminHome />
-                    </WalletGuard>
+                   
                   } 
                 />
                 <Route 
                   path="/admin/create-group" 
                   element={
-                    <WalletGuard>
+                    
                       <CreateGroup />
-                    </WalletGuard>
+                   
                   } 
                 />
                 <Route 
                   path="/admin/groups" 
                   element={
-                    <WalletGuard>
+                    
                       <Groups />
-                    </WalletGuard>
+                    
                   } 
                 />
                 <Route 
                   path="/admin/edit-group/:id" 
                   element={
-                    <WalletGuard>
+                   
                       <EditGroup />
-                    </WalletGuard>
+                   
                   } 
                 />
                 <Route 
                   path="/admin/profile" 
                   element={
-                    <WalletGuard>
+                 
                       <AdminProfile />
-                    </WalletGuard>
+                    
                   } 
                 />
                 
