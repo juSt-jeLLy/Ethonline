@@ -64,9 +64,13 @@ export const Navbar = ({ role }: NavbarProps) => {
             <Link to="/" className="flex items-center gap-2">
               <motion.div
                 whileHover={{ scale: 1.05 }}
-                className="text-2xl font-bold gradient-text"
+                className="flex items-center"
               >
-                PayStream
+                <img 
+                  src="/logo.png" 
+                  alt="PayStream" 
+                  className="h-8 w-auto"
+                />
               </motion.div>
             </Link>
             <div className="px-3 py-1 rounded-full glass-card text-xs font-medium text-primary">

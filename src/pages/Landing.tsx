@@ -93,9 +93,13 @@ const Landing = () => {
             >
               <Wallet className="h-20 w-20 text-primary mx-auto animate-float" />
             </motion.div>
-            <h1 className="text-6xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
-              PayStream Web3
-            </h1>
+            <div className="flex justify-center">
+              <img 
+                src="/logoMainPage.png" 
+                alt="PayStream" 
+                className="h-20 w-auto"
+              />
+            </div>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
               The future of decentralized payroll management. Secure, transparent, and efficient.
             </p>
