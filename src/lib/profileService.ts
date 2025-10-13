@@ -1574,4 +1574,187 @@ export class ProfileService {
       return { success: false, error: error.message, data: null };
     }
   }
+
+  // Employee Dashboard Functions
+  static async getEmployeeDashboardStats(walletAddress: string) {
+    try {
+      console.log('Fetching employee dashboard stats for wallet:', walletAddress);
+      
+      // First, find all wallets for this address to get employee_id
+      const { data: wallets, error: walletError } = await supabase
+        .from('wallets')
+        .select('employee_id, employment_id')
+        .eq('account_address', walletAddress);
+
+      if (walletError) {
+        console.error('Error fetching wallet data:', walletError);
+        return { success: false, error: walletError.message, data: null };
+      }
+
+      if (!wallets || wallets.length === 0) {
+        console.log('=== EMPLOYEE DASHBOARD DEBUG ===');
+        console.log('Input wallet address:', walletAddress);
+        console.log('No wallet data found for address:', walletAddress);
+        console.log('=== END DEBUG ===');
+        return { 
+          success: true, 
+          data: {
+            totalEarned: 0,
+            activeEmployments: 0,
+            activeContracts: 0,
+            nextPayment: null,
+            recentActivity: []
+          }
+        };
+      }
+
+      // Get all unique employee_ids from the wallets
+      const employeeIds = [...new Set(wallets.map(w => w.employee_id).filter(Boolean))];
+      
+      if (employeeIds.length === 0) {
+        console.log('=== EMPLOYEE DASHBOARD DEBUG ===');
+        console.log('Input wallet address:', walletAddress);
+        console.log('Found wallets:', wallets);
+        console.log('No employee IDs found for wallet:', walletAddress);
+        console.log('=== END DEBUG ===');
+        return { 
+          success: true, 
+          data: {
+            totalEarned: 0,
+            activeEmployments: 0,
+            activeContracts: 0,
+            nextPayment: null,
+            recentActivity: []
+          }
+        };
+      }
+
+      // Get all employments for these employee_ids
+      const { data: employmentData, error: employmentError } = await supabase
+        .from('employments')
+        .select(`
+          id,
+          employer_id,
+          employee_id,
+          payment_amount,
+          payment_frequency,
+          status,
+          created_at,
+          employers!inner(
+            name,
+            email
+          )
+        `)
+        .in('employee_id', employeeIds);
+
+      if (employmentError) {
+        console.error('Error fetching employment data:', employmentError);
+        return { success: false, error: employmentError.message, data: null };
+      }
+
+      if (!employmentData || employmentData.length === 0) {
+        console.log('=== EMPLOYEE DASHBOARD DEBUG ===');
+        console.log('Input wallet address:', walletAddress);
+        console.log('Found wallets:', wallets);
+        console.log('Employee IDs extracted:', employeeIds);
+        console.log('No employment data found for employee IDs:', employeeIds);
+        console.log('=== END DEBUG ===');
+        return { 
+          success: true, 
+          data: {
+            totalEarned: 0,
+            activeEmployments: 0,
+            activeContracts: 0,
+            nextPayment: null,
+            recentActivity: []
+          }
+        };
+      }
+
+      // Get all active employments (regardless of payments)
+      const activeEmployments = employmentData.filter(employment => 
+        employment.status === 'active'
+      );
+
+      // Check for actual payments made (via Blockscout API)
+      let totalEarnedFromPayments = 0;
+      let activeContractsWithPayments = 0;
+      
+      for (const employment of activeEmployments) {
+        const employer = Array.isArray(employment.employers) ? employment.employers[0] : employment.employers;
+        
+        if (employer?.email) {
+          // For demo purposes, we'll use a test employer address
+          // In production, you'd need to map employer email to their wallet address
+          const TEST_EMPLOYER_ADDRESS = "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6";
+          
+          try {
+            const paymentResult = await this.getPaymentTransactions(walletAddress, TEST_EMPLOYER_ADDRESS, 5);
+            if (paymentResult.success && paymentResult.data.length > 0) {
+              // Calculate total earned from actual payments
+              const paymentsFromThisEmployer = paymentResult.data.reduce((sum, tx) => {
+                return sum + parseFloat(tx.valueFormatted || '0');
+              }, 0);
+              totalEarnedFromPayments += paymentsFromThisEmployer;
+              activeContractsWithPayments++;
+            }
+          } catch (error) {
+            console.log('Could not fetch payment data for employer:', employer.name);
+          }
+        }
+      }
+
+      // Calculate total potential earnings (from employment records)
+      const totalPotentialEarnings = employmentData.reduce((sum, employment) => {
+        return sum + (employment.payment_amount || 0);
+      }, 0);
+
+      // Get next payment info (simplified - could be enhanced with actual payment schedules)
+      const nextPayment = activeEmployments.find(employment => 
+        employment.status === 'active'
+      );
+
+      // Get recent activity (last 5 employments)
+      const recentActivity = employmentData
+        .sort((a, b) => {
+          return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+        })
+        .slice(0, 5)
+        .map(employment => {
+          const employer = Array.isArray(employment.employers) ? employment.employers[0] : employment.employers;
+          return {
+            title: employment.status === 'active' ? 'Active Employment' : 'Contract Ended',
+            amount: `$${employment.payment_amount || 0}`,
+            date: new Date(employment.created_at || 0).toLocaleDateString(),
+            company: employer?.name || 'Unknown Company'
+          };
+        });
+
+      const dashboardData = {
+        totalEarned: totalEarnedFromPayments, // Actual payments received
+        totalPotentialEarnings, // Potential earnings from employment records
+        activeEmployments: activeEmployments.length, // Employment relationships
+        activeContracts: activeContractsWithPayments, // Employment relationships with actual payments
+        nextPayment: nextPayment ? {
+          days: 5, // Simplified - could calculate actual days
+          amount: nextPayment.payment_amount || 0
+        } : null,
+        recentActivity
+      };
+
+      console.log('=== EMPLOYEE DASHBOARD DEBUG ===');
+      console.log('Input wallet address:', walletAddress);
+      console.log('Found wallets:', wallets);
+      console.log('Employee IDs extracted:', employeeIds);
+      console.log('Employment data found:', employmentData);
+      console.log('Active employments:', activeEmployments);
+      console.log('Final dashboard data:', dashboardData);
+      console.log('=== END DEBUG ===');
+      return { success: true, data: dashboardData };
+
+    } catch (error) {
+      console.error('Error fetching employee dashboard stats:', error);
+      return { success: false, error: error.message, data: null };
+    }
+  }
 }
