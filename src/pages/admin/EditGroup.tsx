@@ -57,7 +57,7 @@ const EditGroup = () => {
   // Convert token amounts to USDC equivalent
   const convertToUSDC = (amount: number, token: string): number => {
     const conversionRates: { [key: string]: number } = {
-      'eth': 2000,    // 1 ETH = 2000 USDC (example rate)
+      'eth': 4000,    // 1 ETH = 2000 USDC (example rate)
       'usdc': 1,      // 1 USDC = 1 USDC
       'usdt': 1,      // 1 USDT = 1 USDC (approximate)
       'dai': 1,       // 1 DAI = 1 USDC (approximate)
