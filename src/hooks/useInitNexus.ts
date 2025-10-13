@@ -39,8 +39,6 @@ const useInitNexus = (sdk: NexusSDK) => {
       }
 
       console.log("Initializing Nexus SDK with provider on TESTNET...");
-      
-      // Force testnet initialization
       await sdk.initialize(provider);
       setNexusSDK(sdk);
       
@@ -77,16 +75,25 @@ const useInitNexus = (sdk: NexusSDK) => {
     }
 
     sdk.setOnAllowanceHook((data: OnAllowanceHookData) => {
-      console.log("Nexus Allowance Hook:", data);
-      allowanceRefCallback.current = data;
+      console.log("Nexus Allowance Hook - AUTO-APPROVING minimal allowances");
+      // AUTO-APPROVE: Approve minimal allowances immediately
+      data.allow(['min']);
     });
 
     sdk.setOnIntentHook((data: OnIntentHookData) => {
-      console.log("Nexus Intent Hook:", data);
-      intentRefCallback.current = data;
+      console.log("Nexus Intent Hook - AUTO-APPROVING payroll intent");
+      console.log("Transfer Details:", {
+        total: data.intent.sourcesTotal,
+        fees: data.intent.fees.total,
+        destination: data.intent.destination
+      });
+      
+      // AUTO-APPROVE: Approve the intent immediately
+      console.log("AUTO-APPROVING: Calling data.allow()");
+      data.allow();
     });
 
-    console.log("Nexus event hooks attached");
+    console.log("Nexus event hooks attached with AUTO-APPROVAL");
   };
 
   return {

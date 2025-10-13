@@ -5,10 +5,11 @@ import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, DollarSign, Calendar, Edit, Send, Loader2, ExternalLink } from "lucide-react";
+import { Building2, Users, DollarSign, Calendar, Edit, Send, Loader2, ExternalLink, CheckCircle, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNotification, useTransactionPopup } from "@blockscout/app-sdk";
 import { ProfileService } from "@/lib/profileService";
+import { useNexus } from '@/providers/NexusProvider';
 
 interface Group {
   id: string;
@@ -34,6 +35,7 @@ interface Group {
     token: string;
     status: string;
     role: string;
+    wallet_address: string;
   }>;
 }
 
@@ -42,36 +44,43 @@ const Groups = () => {
   const { toast } = useToast();
   const { openTxToast } = useNotification();
   const { openPopup } = useTransactionPopup();
+  const { nexusSDK, isInitialized } = useNexus();
+  
   const [groups, setGroups] = useState<Group[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<{ [key: string]: 'success' | 'error' | 'processing' }>({});
 
-  // Mock data as fallback
+  // Mock data with single employee for testing
   const mockGroups: Group[] = [
     {
       id: "mock-1",
       name: "Engineering Team Q1",
-      employees: 12,
-      totalPayment: "24,000 USDC",
-      nextPayment: "March 31, 2025",
+      employees: 1,
+      totalPayment: "222 USDC",
+      nextPayment: "TBD",
       status: "Active",
-    },
-    {
-      id: "mock-2", 
-      name: "Marketing Department",
-      employees: 8,
-      totalPayment: "16,000 USDC",
-      nextPayment: "March 31, 2025",
-      status: "Active",
-    },
-    {
-      id: "mock-3",
-      name: "Sales Team",
-      employees: 15,
-      totalPayment: "30,000 USDC",
-      nextPayment: "March 31, 2025",
-      status: "Active",
-    },
+      employer: {
+        id: "1",
+        name: "Nexus",
+        email: "admin@nexus.com"
+      },
+      employeeDetails: [
+        {
+          id: "emp-1",
+          first_name: "Kevin",
+          last_name: "Larson",
+          email: "kevin@walletchat.fun",
+          payment_amount: 222,
+          payment_frequency: "monthly",
+          chain: "optimism-sepolia",
+          token: "usdc",
+          status: "active",
+          role: "developer",
+          wallet_address: "0xdB772823f62c009E6EC805BC57A4aFc7B2701F1F"
+        }
+      ]
+    }
   ];
 
   // Load groups from database
@@ -112,29 +121,127 @@ const Groups = () => {
     loadGroups();
   }, []);
 
-  const handlePayGroup = async (group: Group) => {
+  const handlePayEmployee = async (group: Group, employee: any) => {
+    if (!nexusSDK || !isInitialized) {
+      toast({
+        title: "Nexus SDK Not Ready",
+        description: "Please wait for Nexus SDK to initialize.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const paymentKey = `${group.id}-${employee.id}`;
+    setIsProcessingPayment(paymentKey);
+    setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'processing' }));
+
+    try {
+      // Exact Nexus SDK structure as per documentation
+      const transferParams = {
+        token: 'USDC' as const,
+        amount: employee.payment_amount.toString(),
+        chainId: 11155420 as const,
+        recipient: '0xdB772823f62c009E6EC805BC57A4aFc7B2701F1F' as `0x${string}`,
+        sourceChains: [11155111] as number[]
+      };
+
+      console.log('Transfer Parameters:', transferParams);
+
+      // Optional: Simulate first to preview costs
+      console.log('Simulating transfer...');
+      const simulation = await nexusSDK.simulateTransfer(transferParams);
+      console.log('Simulation Result:', simulation);
+      
+      if (simulation.intent?.fees) {
+        console.log('Estimated fees:', simulation.intent.fees);
+      }
+
+      // Execute the actual transfer
+      console.log('Executing transfer...');
+      const transferResult = await nexusSDK.transfer(transferParams);
+
+      console.log('Transfer Result:', transferResult);
+
+      if (transferResult.success) {
+        setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'success' }));
+        
+        toast({
+          title: "🎉 Payment Successful!",
+          description: `Sent ${employee.payment_amount} USDC to ${employee.first_name} ${employee.last_name} on Optimism Sepolia`,
+        });
+
+        // Show transaction in Blockscout if available
+        if (transferResult.transactionHash) {
+          try {
+            await openTxToast("11155420", transferResult.transactionHash);
+          } catch (txError) {
+            console.log('Could not open transaction toast:', txError);
+          }
+        }
+
+        // Log explorer URL for manual checking
+        if (transferResult.explorerUrl) {
+          console.log('Transaction Explorer:', transferResult.explorerUrl);
+        }
+
+      } else {
+        console.error('Transfer failed:', transferResult.error);
+        setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'error' }));
+        
+        toast({
+          title: "❌ Payment Failed",
+          description: transferResult.error || "Unknown error occurred during transfer",
+          variant: "destructive",
+        });
+      }
+
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'error' }));
+      
+      const errorMessage = error instanceof Error ? error.message : "Failed to process payment";
+      
+      toast({
+        title: "💸 Payment Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingPayment(null);
+      
+      // Clear payment status after 5 seconds
+      setTimeout(() => {
+        setPaymentStatus(prev => {
+          const newStatus = { ...prev };
+          delete newStatus[paymentKey];
+          return newStatus;
+        });
+      }, 5000);
+    }
+  };
+
+  const handlePayAllEmployees = async (group: Group) => {
+    if (!group.employeeDetails || group.employeeDetails.length === 0) {
+      toast({
+        title: "No Employees",
+        description: "This group has no employees to pay.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsProcessingPayment(group.id);
     
     try {
-      // Use a known successful transaction hash for demonstration
-      // This is a real successful transaction on Ethereum mainnet
-      const knownGoodTxHash = "0x5c504ed432cb51138bcf09aa5e8a410dd4a1e204ef84bfed1be16dfba1b22060";
-      
-      // Show initial toast
-      toast({
-        title: "Payment Initiated",
-        description: `Processing payments for ${group.name}`,
-      });
+      // For now, just pay the first employee (Kevin Larson)
+      const employee = group.employeeDetails[0];
+      await handlePayEmployee(group, employee);
 
-      // Use Blockscout SDK to show transaction toast
-      // Using Ethereum mainnet (chain ID "1") for demo
-      await openTxToast("1", knownGoodTxHash);
-      
     } catch (error) {
-      console.error('Error processing payment:', error);
+      console.error('Error in batch payment:', error);
       toast({
-        title: "Payment Error",
-        description: "Failed to process payment. Please try again.",
+        title: "Batch Payment Error",
+        description: "Failed to process batch payment",
         variant: "destructive",
       });
     } finally {
@@ -143,15 +250,19 @@ const Groups = () => {
   };
 
   const handleViewTransactionHistory = () => {
-    // Open transaction history popup for Ethereum mainnet
     openPopup({
-      chainId: "1", // Ethereum mainnet
+      chainId: "11155420",
     });
+  };
+
+  const getPaymentStatus = (groupId: string, employeeId: string) => {
+    return paymentStatus[`${groupId}-${employeeId}`];
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-cyan-50">
       <Navbar role="admin" />
+      {/* IntentApprovalModal removed - auto-approval is enabled */}
       
       <div className="container mx-auto px-6 py-12">
         <motion.div
@@ -264,6 +375,53 @@ const Groups = () => {
                         </div>
                       </div>
 
+                      {/* Employee Details */}
+                      {group.employeeDetails && group.employeeDetails.length > 0 && (
+                        <div className="pt-4 border-t border-white/20">
+                          <h4 className="font-semibold mb-3 text-sm">Employees ({group.employeeDetails.length})</h4>
+                          <div className="space-y-3">
+                            {group.employeeDetails.map((employee) => {
+                              const status = getPaymentStatus(group.id, employee.id);
+                              return (
+                                <div key={employee.id} className="flex items-center justify-between p-2 bg-white/20 rounded-lg">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="font-medium text-sm truncate">
+                                        {employee.first_name} {employee.last_name}
+                                      </span>
+                                      {status === 'success' && (
+                                        <CheckCircle className="h-3 w-3 text-green-500" />
+                                      )}
+                                      {status === 'error' && (
+                                        <XCircle className="h-3 w-3 text-red-500" />
+                                      )}
+                                      {status === 'processing' && (
+                                        <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground truncate">
+                                      {employee.wallet_address} • {employee.chain} • {employee.payment_amount} {employee.token.toUpperCase()}
+                                    </div>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handlePayEmployee(group, employee)}
+                                    disabled={isProcessingPayment === `${group.id}-${employee.id}`}
+                                    className="ml-2"
+                                  >
+                                    {isProcessingPayment === `${group.id}-${employee.id}` ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Send className="h-3 w-3" />
+                                    )}
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="flex gap-2 pt-4">
                         <Button
                           variant="outline"
@@ -273,18 +431,18 @@ const Groups = () => {
                           <Edit className="mr-2 h-4 w-4" />
                           Edit
                         </Button>
-                      <Button
-                        className="flex-1 bg-gradient-to-r from-primary to-cyan-500 hover:opacity-90"
-                        onClick={() => handlePayGroup(group)}
-                        disabled={isProcessingPayment === group.id}
-                      >
-                        {isProcessingPayment === group.id ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Send className="mr-2 h-4 w-4" />
-                        )}
-                        {isProcessingPayment === group.id ? "Processing..." : "Pay"}
-                      </Button>
+                        <Button
+                          className="flex-1 bg-gradient-to-r from-primary to-cyan-500 hover:opacity-90"
+                          onClick={() => handlePayAllEmployees(group)}
+                          disabled={isProcessingPayment === group.id}
+                        >
+                          {isProcessingPayment === group.id ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="mr-2 h-4 w-4" />
+                          )}
+                          {isProcessingPayment === group.id ? "Processing..." : "Pay All"}
+                        </Button>
                       </div>
                     </div>
                   </Card>

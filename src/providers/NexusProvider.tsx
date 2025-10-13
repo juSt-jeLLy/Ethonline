@@ -36,7 +36,7 @@ const NexusProvider = ({ children }: { children: React.ReactNode }) => {
   const sdk = useMemo(
     () =>
       new NexusSDK({
-        network: "testnet", // Force testnet
+        network: "testnet",
         debug: true,
       }),
     [],
@@ -70,7 +70,7 @@ const NexusProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     // Check if we're on a testnet chain
-    const testnetChainIds = [11155111, 84532, 421614, 11155420, 80002]; // Sepolia, Base Sepolia, Arbitrum Sepolia, Optimism Sepolia, Polygon Amoy
+    const testnetChainIds = [11155111, 84532, 421614, 11155420, 80002];
     if (chain && !testnetChainIds.includes(chain.id)) {
       setError(`Please switch to a testnet network (Sepolia, Base Sepolia, etc.)`);
       console.warn(`Current chain ${chain.id} is not a testnet. Please switch.`);
@@ -129,7 +129,15 @@ const NexusProvider = ({ children }: { children: React.ReactNode }) => {
       isLoading,
       error,
     }),
-    [nexusSDK, intentRefCallback, allowanceRefCallback, handleInit, isInitialized, isLoading, error],
+    [
+      nexusSDK, 
+      intentRefCallback, 
+      allowanceRefCallback, 
+      handleInit, 
+      isInitialized, 
+      isLoading, 
+      error,
+    ],
   );
 
   return (
