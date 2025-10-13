@@ -36,8 +36,35 @@ interface Group {
     status: string;
     role: string;
     wallet_address: string;
+    employment_id?: string;
   }>;
 }
+
+// Chain mapping from database names to Nexus SDK chain IDs
+const CHAIN_MAPPING: { [key: string]: number } = {
+  'optimism': 11155420, // Optimism Sepolia
+  'ethereum': 11155111, // Sepolia
+  'polygon': 80002,     // Polygon Amoy
+  'arbitrum': 421614,   // Arbitrum Sepolia
+  'base': 84532,        // Base Sepolia
+  'monad': 1014,        // Monad Testnet
+  // Add aliases for different naming conventions
+  'optimism-sepolia': 11155420,
+  'op-sepolia': 11155420,
+  'sepolia': 11155111,
+  'polygon-amoy': 80002,
+  'arbitrum-sepolia': 421614,
+  'base-sepolia': 84532,
+  'monad-testnet': 1014
+};
+
+// Token mapping to ensure correct token types
+const TOKEN_MAPPING: { [key: string]: 'USDC' | 'USDT' | 'ETH' } = {
+  'usdc': 'USDC',
+  'usdt': 'USDT', 
+  'eth': 'ETH',
+  'ethereum': 'ETH'
+};
 
 const Groups = () => {
   const navigate = useNavigate();
@@ -51,66 +78,37 @@ const Groups = () => {
   const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<{ [key: string]: 'success' | 'error' | 'processing' }>({});
 
-  // Mock data with single employee for testing
-  const mockGroups: Group[] = [
-    {
-      id: "mock-1",
-      name: "Engineering Team Q1",
-      employees: 1,
-      totalPayment: "222 USDC",
-      nextPayment: "TBD",
-      status: "Active",
-      employer: {
-        id: "1",
-        name: "Nexus",
-        email: "admin@nexus.com"
-      },
-      employeeDetails: [
-        {
-          id: "emp-1",
-          first_name: "Kevin",
-          last_name: "Larson",
-          email: "kevin@walletchat.fun",
-          payment_amount: 222,
-          payment_frequency: "monthly",
-          chain: "optimism-sepolia",
-          token: "usdc",
-          status: "active",
-          role: "developer",
-          wallet_address: "0xdB772823f62c009E6EC805BC57A4aFc7B2701F1F"
-        }
-      ]
-    }
-  ];
-
-  // Load groups from database
+  // Load groups from database - NO MOCK DATA
   useEffect(() => {
     const loadGroups = async () => {
       setIsLoading(true);
       try {
         const result = await ProfileService.getPaymentGroups();
-        if (result.success && result.data.length > 0) {
-          setGroups(result.data);
-          console.log('Loaded groups from database:', result.data);
+        console.log('Raw groups data from database:', result);
+        
+        if (result.success && result.data && result.data.length > 0) {
+          // Process the groups to ensure we have proper employee details with wallet addresses
+          const processedGroups = await processGroupsWithWalletData(result.data);
+          setGroups(processedGroups);
+          console.log('Processed groups with wallet data:', processedGroups);
         } else {
-          // Use mock data if no real data or error
-          setGroups(mockGroups);
-          console.log('Using mock groups data');
+          setGroups([]);
+          console.log('No groups found in database');
           if (result.error) {
             console.error('Error loading groups:', result.error);
             toast({
-              title: "Warning",
-              description: "Using sample data. Check database connection.",
+              title: "Error",
+              description: "Failed to load groups from database",
               variant: "destructive",
             });
           }
         }
       } catch (error) {
         console.error('Error loading groups:', error);
-        setGroups(mockGroups);
+        setGroups([]);
         toast({
           title: "Error",
-          description: "Failed to load groups. Using sample data.",
+          description: "Failed to load groups from database",
           variant: "destructive",
         });
       } finally {
@@ -119,7 +117,82 @@ const Groups = () => {
     };
 
     loadGroups();
-  }, []);
+  }, [toast]);
+
+  // Function to fetch wallet data for employees
+  const processGroupsWithWalletData = async (groups: Group[]) => {
+    const processedGroups = [];
+    
+    for (const group of groups) {
+      if (group.employeeDetails && group.employeeDetails.length > 0) {
+        const employeesWithWallets = [];
+        
+        for (const employee of group.employeeDetails) {
+          try {
+            // Fetch wallet data for this employee
+            const walletResult = await ProfileService.getEmployeeWalletData(employee.id, employee.employment_id);
+            
+            if (walletResult.success && walletResult.data) {
+              employeesWithWallets.push({
+                ...employee,
+                wallet_address: walletResult.data.account_address || '',
+                chain: walletResult.data.chain || employee.chain || 'ethereum',
+                token: walletResult.data.token || employee.token || 'usdc',
+                payment_amount: employee.payment_amount || 0
+              });
+            } else {
+              // If no wallet found, use employee data but mark as invalid for payment
+              employeesWithWallets.push({
+                ...employee,
+                wallet_address: '',
+                payment_amount: employee.payment_amount || 0
+              });
+            }
+          } catch (error) {
+            console.error(`Error fetching wallet for employee ${employee.id}:`, error);
+            employeesWithWallets.push({
+              ...employee,
+              wallet_address: '',
+              payment_amount: employee.payment_amount || 0
+            });
+          }
+        }
+        
+        processedGroups.push({
+          ...group,
+          employeeDetails: employeesWithWallets
+        });
+      } else {
+        processedGroups.push(group);
+      }
+    }
+    
+    return processedGroups;
+  };
+
+  const getChainId = (chainName: string): number => {
+    const normalizedChain = chainName.toLowerCase().trim();
+    return CHAIN_MAPPING[normalizedChain] || 11155420; // Default to Optimism Sepolia
+  };
+
+  const getTokenType = (tokenName: string): 'USDC' | 'USDT' | 'ETH' => {
+    const normalizedToken = tokenName.toLowerCase().trim();
+    return TOKEN_MAPPING[normalizedToken] || 'USDC'; // Default to USDC
+  };
+
+  const validateEmployeeData = (employee: any) => {
+    if (!employee.wallet_address || employee.wallet_address.trim() === '') {
+      throw new Error(`Employee ${employee.first_name} ${employee.last_name} has no wallet address`);
+    }
+    
+    if (!employee.payment_amount || employee.payment_amount <= 0) {
+      throw new Error(`Employee ${employee.first_name} ${employee.last_name} has invalid payment amount`);
+    }
+    
+    if (!employee.wallet_address.startsWith('0x') || employee.wallet_address.length !== 42) {
+      throw new Error(`Employee ${employee.first_name} ${employee.last_name} has invalid wallet address format`);
+    }
+  };
 
   const handlePayEmployee = async (group: Group, employee: any) => {
     if (!nexusSDK || !isInitialized) {
@@ -128,7 +201,7 @@ const Groups = () => {
         description: "Please wait for Nexus SDK to initialize.",
         variant: "destructive",
       });
-      return;
+      return { success: false, error: "Nexus SDK not ready" };
     }
 
     const paymentKey = `${group.id}-${employee.id}`;
@@ -136,27 +209,25 @@ const Groups = () => {
     setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'processing' }));
 
     try {
-      // Exact Nexus SDK structure as per documentation
+      // Validate employee data before processing
+      validateEmployeeData(employee);
+
+      // Use actual employee data from database with proper chain mapping
+      const destinationChainId = getChainId(employee.chain);
+      const tokenType = getTokenType(employee.token);
+
       const transferParams = {
-        token: 'USDC' as const,
+        token: tokenType,
         amount: employee.payment_amount.toString(),
-        chainId: 11155420 as const,
-        recipient: '0xdB772823f62c009E6EC805BC57A4aFc7B2701F1F' as `0x${string}`,
+        chainId: destinationChainId as any,
+        recipient: employee.wallet_address as `0x${string}`,
         sourceChains: [11155111] as number[]
       };
 
       console.log('Transfer Parameters:', transferParams);
+      console.log('Employee Data:', employee);
 
-      // Optional: Simulate first to preview costs
-      console.log('Simulating transfer...');
-      const simulation = await nexusSDK.simulateTransfer(transferParams);
-      console.log('Simulation Result:', simulation);
-      
-      if (simulation.intent?.fees) {
-        console.log('Estimated fees:', simulation.intent.fees);
-      }
-
-      // Execute the actual transfer
+      // Execute the transfer
       console.log('Executing transfer...');
       const transferResult = await nexusSDK.transfer(transferParams);
 
@@ -167,22 +238,19 @@ const Groups = () => {
         
         toast({
           title: "🎉 Payment Successful!",
-          description: `Sent ${employee.payment_amount} USDC to ${employee.first_name} ${employee.last_name} on Optimism Sepolia`,
+          description: `Sent ${employee.payment_amount} ${tokenType} to ${employee.first_name} ${employee.last_name}`,
         });
 
         // Show transaction in Blockscout if available
         if (transferResult.transactionHash) {
           try {
-            await openTxToast("11155420", transferResult.transactionHash);
+            await openTxToast(destinationChainId.toString(), transferResult.transactionHash);
           } catch (txError) {
             console.log('Could not open transaction toast:', txError);
           }
         }
 
-        // Log explorer URL for manual checking
-        if (transferResult.explorerUrl) {
-          console.log('Transaction Explorer:', transferResult.explorerUrl);
-        }
+        return { success: true, transactionHash: transferResult.transactionHash };
 
       } else {
         console.error('Transfer failed:', transferResult.error);
@@ -193,6 +261,8 @@ const Groups = () => {
           description: transferResult.error || "Unknown error occurred during transfer",
           variant: "destructive",
         });
+
+        return { success: false, error: transferResult.error };
       }
 
     } catch (error) {
@@ -206,17 +276,10 @@ const Groups = () => {
         description: errorMessage,
         variant: "destructive",
       });
+
+      return { success: false, error: errorMessage };
     } finally {
       setIsProcessingPayment(null);
-      
-      // Clear payment status after 5 seconds
-      setTimeout(() => {
-        setPaymentStatus(prev => {
-          const newStatus = { ...prev };
-          delete newStatus[paymentKey];
-          return newStatus;
-        });
-      }, 5000);
     }
   };
 
@@ -230,18 +293,82 @@ const Groups = () => {
       return;
     }
 
+    // Filter out employees without valid wallet addresses
+    const validEmployees = group.employeeDetails.filter(emp => 
+      emp.wallet_address && 
+      emp.wallet_address.trim() !== '' && 
+      emp.payment_amount && 
+      emp.payment_amount > 0
+    );
+
+    if (validEmployees.length === 0) {
+      toast({
+        title: "No Valid Employees",
+        description: "No employees in this group have valid wallet addresses or payment amounts.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (validEmployees.length < group.employeeDetails.length) {
+      toast({
+        title: "Some Employees Skipped",
+        description: `${group.employeeDetails.length - validEmployees.length} employees skipped due to missing wallet addresses or payment amounts.`,
+        variant: "default",
+      });
+    }
+
     setIsProcessingPayment(group.id);
     
     try {
-      // For now, just pay the first employee (Kevin Larson)
-      const employee = group.employeeDetails[0];
-      await handlePayEmployee(group, employee);
+      let successfulPayments = 0;
+      let failedPayments = 0;
+
+      // Process payments for VALID employees in the group ONE BY ONE
+      for (let i = 0; i < validEmployees.length; i++) {
+        const employee = validEmployees[i];
+        console.log(`Processing payment ${i + 1}/${validEmployees.length} for:`, employee.first_name, employee.last_name);
+        
+        // Show progress toast
+        toast({
+          title: "Processing Payments",
+          description: `Processing payment ${i + 1}/${validEmployees.length} for ${employee.first_name} ${employee.last_name}`,
+        });
+
+        // Wait for the current payment to complete before starting the next
+        const result = await handlePayEmployee(group, employee);
+        
+        if (result.success) {
+          successfulPayments++;
+        } else {
+          failedPayments++;
+        }
+
+        // Wait 2 seconds before processing next employee (even if previous failed)
+        if (i < validEmployees.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+
+      // Show final summary
+      if (failedPayments === 0) {
+        toast({
+          title: "✅ All Payments Complete",
+          description: `Successfully processed all ${successfulPayments} payments in ${group.name}`,
+        });
+      } else {
+        toast({
+          title: "⚠️ Payments Partially Complete",
+          description: `Completed ${successfulPayments} payments, ${failedPayments} failed in ${group.name}`,
+          variant: "destructive",
+        });
+      }
 
     } catch (error) {
       console.error('Error in batch payment:', error);
       toast({
         title: "Batch Payment Error",
-        description: "Failed to process batch payment",
+        description: "Failed to process batch payment for all employees",
         variant: "destructive",
       });
     } finally {
@@ -262,7 +389,6 @@ const Groups = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-cyan-50">
       <Navbar role="admin" />
-      {/* IntentApprovalModal removed - auto-approval is enabled */}
       
       <div className="container mx-auto px-6 py-12">
         <motion.div
@@ -375,53 +501,6 @@ const Groups = () => {
                         </div>
                       </div>
 
-                      {/* Employee Details */}
-                      {group.employeeDetails && group.employeeDetails.length > 0 && (
-                        <div className="pt-4 border-t border-white/20">
-                          <h4 className="font-semibold mb-3 text-sm">Employees ({group.employeeDetails.length})</h4>
-                          <div className="space-y-3">
-                            {group.employeeDetails.map((employee) => {
-                              const status = getPaymentStatus(group.id, employee.id);
-                              return (
-                                <div key={employee.id} className="flex items-center justify-between p-2 bg-white/20 rounded-lg">
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <span className="font-medium text-sm truncate">
-                                        {employee.first_name} {employee.last_name}
-                                      </span>
-                                      {status === 'success' && (
-                                        <CheckCircle className="h-3 w-3 text-green-500" />
-                                      )}
-                                      {status === 'error' && (
-                                        <XCircle className="h-3 w-3 text-red-500" />
-                                      )}
-                                      {status === 'processing' && (
-                                        <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-                                      )}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground truncate">
-                                      {employee.wallet_address} • {employee.chain} • {employee.payment_amount} {employee.token.toUpperCase()}
-                                    </div>
-                                  </div>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handlePayEmployee(group, employee)}
-                                    disabled={isProcessingPayment === `${group.id}-${employee.id}`}
-                                    className="ml-2"
-                                  >
-                                    {isProcessingPayment === `${group.id}-${employee.id}` ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <Send className="h-3 w-3" />
-                                    )}
-                                  </Button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
                       <div className="flex gap-2 pt-4">
                         <Button
                           variant="outline"
@@ -429,12 +508,22 @@ const Groups = () => {
                           onClick={() => navigate(`/admin/edit-group/${group.id}`)}
                         >
                           <Edit className="mr-2 h-4 w-4" />
-                          Edit
+                          Edit Group
                         </Button>
                         <Button
                           className="flex-1 bg-gradient-to-r from-primary to-cyan-500 hover:opacity-90"
                           onClick={() => handlePayAllEmployees(group)}
-                          disabled={isProcessingPayment === group.id}
+                          disabled={
+                            isProcessingPayment === group.id || 
+                            !group.employeeDetails || 
+                            group.employeeDetails.length === 0 ||
+                            group.employeeDetails.filter(emp => 
+                              emp.wallet_address && 
+                              emp.wallet_address.trim() !== '' && 
+                              emp.payment_amount && 
+                              emp.payment_amount > 0
+                            ).length === 0
+                          }
                         >
                           {isProcessingPayment === group.id ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

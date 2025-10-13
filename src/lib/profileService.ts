@@ -474,7 +474,34 @@ export class ProfileService {
       return { success: false, error: error.message }
     }
   }
+// Add this method to your ProfileService class
 
+// Get employee wallet data
+static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
+  try {
+    let query = supabase
+      .from('wallets')
+      .select('*')
+      .eq('employee_id', employeeId)
+      .eq('is_default', true);
+
+    // If employmentId is provided, prefer wallet linked to this employment
+    if (employmentId) {
+      query = query.eq('employment_id', employmentId);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    return { success: true, data: data || null };
+  } catch (error) {
+    console.error('Error fetching employee wallet data:', error);
+    return { success: false, error: error.message, data: null };
+  }
+}
   // Delete employee profile
   static async deleteEmployeeProfile(userId: string) {
     try {
