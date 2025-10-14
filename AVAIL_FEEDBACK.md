@@ -8,12 +8,26 @@ This document contains feedback, issues, and suggestions for the AVAIL team base
 **Use Case**: Employer-employee payment processing with cross-chain capabilities  
 **Framework**: AVAIL Framework with Nexus SDK integration  
 
-### 1. Documentation & Examples
+### 1. Documentation Questions
 
-**Issue**: Limited 
-- **Impact**: Difficulty 
-- **Suggestion**: Provide more comprehensive examples for common use cases 
-- **Priority**: ?
+**Issue**: Question on Allowances and order of operations 
+```
+How Allowances Work?
+Here is how the allowances enables chain abstracted transactions:
+
+User approves the protocol to access funds from two or more source chains.
+Protocol unifies user balance across these chains.
+Unified funds go into protocol vaults.
+The protocol presents the user with an intent to transact on the destination along with amount and fee details.
+```
+
+When you say `unified funds go into protocol vaults` does the users wallet get emptied of a token type and put into protocol vaults?  Or is it just the amount of the transaction?  I was a bit confused because the default allowance is unlimited, I assume its just the transaction amount but wasn't 100% sure here.
+
+Do you have an easy way for users to revoke all allowances in the event of a security issue?  Or should each app provide that capability?
+
+
+
+
 
 
 
