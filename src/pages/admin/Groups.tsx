@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Building2, Users, DollarSign, Calendar, Edit, Send, Loader2, ExternalLink, CheckCircle, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useNotification, useTransactionPopup } from "@blockscout/app-sdk";
+// Removed Blockscout SDK imports since we're using Supabase function instead
 import { ProfileService } from "@/lib/profileService";
 import { useNexus } from '@/providers/NexusProvider';
+import { useAccount } from 'wagmi';
 
 interface Group {
   id: string;
@@ -59,6 +60,16 @@ const CHAIN_MAPPING: { [key: string]: number } = {
   'monad-testnet': 1014
 };
 
+// Reverse mapping from chain ID to chain name for Supabase function
+const CHAIN_ID_TO_NAME: { [key: number]: string } = {
+  11155420: 'optimism-sepolia',
+  11155111: '11155111', // Use chain ID directly since sepolia isn't in your function
+  80002: 'polygon-amoy',
+  421614: 'arbitrum-sepolia',
+  84532: 'base-sepolia'
+  //: 'optimism-sepolia' // Fallback to optimism-sepolia for unsupported chains
+};
+
 // Token mapping to ensure correct token types
 const TOKEN_MAPPING: { [key: string]: 'USDC' | 'USDT' | 'ETH' } = {
   'usdc': 'USDC',
@@ -78,8 +89,8 @@ const TOKEN_CONVERSION_RATES: { [key: string]: number } = {
 const Groups = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { openTxToast } = useNotification();
-  const { openPopup } = useTransactionPopup();
+  const { address } = useAccount();
+  // Removed useTransactionPopup since we're not using Blockscout SDK anymore
   const { nexusSDK, isInitialized } = useNexus();
   
   const [groups, setGroups] = useState<Group[]>([]);
@@ -220,6 +231,10 @@ const Groups = () => {
     return TOKEN_MAPPING[normalizedToken] || 'USDC'; // Default to USDC
   };
 
+  const getChainName = (chainId: number): string => {
+    return CHAIN_ID_TO_NAME[chainId] || 'optimism-sepolia'; // Default to optimism-sepolia
+  };
+
   const validateEmployeeData = (employee: any) => {
     if (!employee.wallet_address || employee.wallet_address.trim() === '') {
       throw new Error(`Employee ${employee.first_name} ${employee.last_name} has no wallet address`);
@@ -285,18 +300,22 @@ const Groups = () => {
         if (transferResult.transactionHash) {
           console.log(`Transaction successful: ${transferResult.transactionHash} on chain ${destinationChainId}`);
           
-          try {
-            // Use Supabase function to avoid CORS issues
-            const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?hash=${transferResult.transactionHash}`);
-            if (response.ok) {
-              const txData = await response.json();
-              console.log('Transaction data from Blockscout:', txData);
-              // You can show this data in a toast or modal if needed
+          // Wait 5 seconds for transaction to be indexed by explorer
+          setTimeout(async () => {
+            try {
+              // Use Supabase function to avoid CORS issues
+              const chainName = getChainName(destinationChainId);
+              const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=${chainName}&hash=${transferResult.transactionHash}&api=v1`);
+              if (response.ok) {
+                const txData = await response.json();
+                console.log('Transaction data from Blockscout:', txData);
+                // You can show this data in a toast or modal if needed
+              }
+            } catch (txError) {
+              console.log('Transaction lookup not available:', txError);
+              // This is not a critical error, just a nice-to-have feature
             }
-          } catch (txError) {
-            console.log('Transaction lookup not available:', txError);
-            // This is not a critical error, just a nice-to-have feature
-          }
+          }, 5000); // Wait 5 seconds
         }
 
         return { success: true, transactionHash: transferResult.transactionHash };
@@ -425,10 +444,36 @@ const Groups = () => {
     }
   };
 
-  const handleViewTransactionHistory = () => {
-    openPopup({
-      chainId: "11155420",
-    });
+  const handleViewTransactionHistory = async () => {
+    if (!address) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet to view transaction history",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Use Supabase function to fetch recent transactions for the current user
+      const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=optimism-sepolia&address=${address}&api=v1`);
+      if (response.ok) {
+        const txData = await response.json();
+        console.log('Transaction history:', txData);
+        // You can display this data in a modal or component instead of opening a new tab
+        toast({
+          title: "Transaction History",
+          description: `Found ${txData.result?.length || 0} transactions`,
+        });
+      }
+    } catch (error) {
+      console.log('Error fetching transaction history:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch transaction history",
+        variant: "destructive",
+      });
+    }
   };
 
   const getPaymentStatus = (groupId: string, employeeId: string) => {

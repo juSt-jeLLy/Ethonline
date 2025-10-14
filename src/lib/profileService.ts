@@ -1425,20 +1425,14 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
     }
   }
 
-  // Get employer transactions from Blockscout API
+  // Get employer transactions from Blockscout API via Supabase function
   static async getEmployerTransactions(employerAddress: string, limit: number = 20) {
     try {
       console.log('Fetching transactions for employer:', employerAddress);
       
-      // Use Blockscout API with API key as query parameter
-      const apiKey = import.meta.env.VITE_BLOCKSCOUT_API_KEY;
-      
-      if (!apiKey) {
-        throw new Error('VITE_BLOCKSCOUT_API_KEY is not set in environment variables');
-      }
-      
+      // Use Supabase function to avoid CORS issues
       const response = await fetch(
-        `https://eth.blockscout.com/api?module=account&action=txlist&address=${employerAddress}&startblock=0&endblock=99999999&page=1&offset=${limit}&sort=desc&apikey=${apiKey}`
+        `https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=optimism-sepolia&address=${employerAddress}&offset=${limit}&api=v1`
       );
       
       if (!response.ok) {
@@ -1478,15 +1472,9 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
     try {
       console.log('Fetching payment transactions for employee:', employeeWallet);
       
-      // Use Blockscout API with API key as query parameter
-      const apiKey = import.meta.env.VITE_BLOCKSCOUT_API_KEY;
-      
-      if (!apiKey) {
-        throw new Error('VITE_BLOCKSCOUT_API_KEY is not set in environment variables');
-      }
-      
+      // Use Supabase function to avoid CORS issues
       const response = await fetch(
-        `https://eth.blockscout.com/api?module=account&action=txlist&address=${employeeWallet}&startblock=0&endblock=99999999&page=1&offset=${limit}&sort=desc&apikey=${apiKey}`
+        `https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=optimism-sepolia&address=${employeeWallet}&offset=${limit}&api=v1`
       );
       
       if (!response.ok) {

@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { NotificationProvider, TransactionPopupProvider } from "@blockscout/app-sdk";
+// Removed Blockscout SDK imports since we're using Supabase function instead
 import Web3Provider from "@/providers/Web3Provider";
 
 import Landing from "./pages/Landing";
@@ -19,15 +19,10 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const App = () => {
-  const blockscoutApiKey = import.meta.env.VITE_BLOCKSCOUT_API_KEY;
-  
-  return (
-    <QueryClientProvider client={queryClient}>
-      <Web3Provider>
-        <NotificationProvider apiKey={blockscoutApiKey}>
-          <TransactionPopupProvider apiKey={blockscoutApiKey}>
-          <TooltipProvider>
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <Web3Provider>
+      <TooltipProvider>
             <Toaster />
             <Sonner />
             <BrowserRouter>
@@ -106,11 +101,8 @@ const App = () => {
               </Routes>
             </BrowserRouter>
           </TooltipProvider>
-        </TransactionPopupProvider>
-      </NotificationProvider>
     </Web3Provider>
   </QueryClientProvider>
-  );
-};
+);
 
 export default App;
