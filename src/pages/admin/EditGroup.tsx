@@ -216,7 +216,7 @@ const EditGroup = () => {
       // Wait 5 seconds for transaction to be indexed by explorer, then lookup
       setTimeout(async () => {
         try {
-          const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=optimism-sepolia&hash=${knownGoodTxHash}&api=v1`);
+          const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=optimism-sepolia&hash=${knownGoodTxHash}&api=v2`);
           if (response.ok) {
             const txData = await response.json();
             console.log('Demo transaction data from Blockscout:', txData);
@@ -250,7 +250,7 @@ const EditGroup = () => {
 
     try {
       // Use Supabase function to fetch recent transactions
-      const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=optimism-sepolia&address=${address}&api=v1`);
+      const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=optimism-sepolia&address=${address}&api=v2`);
       if (response.ok) {
         const txData = await response.json();
         console.log('Transaction history:', txData);

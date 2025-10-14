@@ -97,6 +97,8 @@ const Groups = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<{ [key: string]: 'success' | 'error' | 'processing' }>({});
+  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
 
   // Helper function to convert token amounts to USDC equivalent
   const convertToUSDC = (amount: number, token: string): number => {
@@ -153,6 +155,13 @@ const Groups = () => {
 
     loadGroups();
   }, [toast]);
+
+  // Fetch recent transactions when address is available
+  useEffect(() => {
+    if (address) {
+      fetchRecentTransactions();
+    }
+  }, [address]);
 
   // Function to fetch wallet data for employees and calculate proper totals
   const processGroupsWithWalletData = async (groups: any[]) => {
@@ -305,7 +314,7 @@ const Groups = () => {
             try {
               // Use Supabase function to avoid CORS issues
               const chainName = getChainName(destinationChainId);
-              const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=${chainName}&hash=${transferResult.transactionHash}&api=v1`);
+              const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=${chainName}&hash=${transferResult.transactionHash}&api=v2`);
               if (response.ok) {
                 const txData = await response.json();
                 console.log('Transaction data from Blockscout:', txData);
@@ -317,6 +326,11 @@ const Groups = () => {
             }
           }, 5000); // Wait 5 seconds
         }
+
+        // Refresh transaction history after successful payment
+        setTimeout(() => {
+          fetchRecentTransactions();
+        }, 6000); // Wait a bit longer than the transaction lookup
 
         return { success: true, transactionHash: transferResult.transactionHash };
 
@@ -444,6 +458,35 @@ const Groups = () => {
     }
   };
 
+  const fetchRecentTransactions = async () => {
+    if (!address) return;
+
+    setIsLoadingTransactions(true);
+    try {
+      // Use Supabase function to fetch recent transactions for the current user
+      const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=optimism-sepolia&address=${address}&api=v2`);
+      if (response.ok) {
+        const txData = await response.json();
+        console.log('Transaction history:', txData);
+        
+        // Get the last 5 transactions (or 1 if we want to start simple)
+        const transactions = txData.items || txData.result || [];
+        const lastTransaction = transactions.slice(0, 1); // Start with just 1 transaction
+        console.log('Transaction data structure:', lastTransaction);
+        console.log('Transaction status values:', lastTransaction.map(tx => ({ 
+          status: tx.status, 
+          result: tx.result, 
+          hash: tx.hash 
+        })));
+        setRecentTransactions(lastTransaction);
+      }
+    } catch (error) {
+      console.log('Error fetching transaction history:', error);
+    } finally {
+      setIsLoadingTransactions(false);
+    }
+  };
+
   const handleViewTransactionHistory = async () => {
     if (!address) {
       toast({
@@ -454,26 +497,11 @@ const Groups = () => {
       return;
     }
 
-    try {
-      // Use Supabase function to fetch recent transactions for the current user
-      const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=optimism-sepolia&address=${address}&api=v1`);
-      if (response.ok) {
-        const txData = await response.json();
-        console.log('Transaction history:', txData);
-        // You can display this data in a modal or component instead of opening a new tab
-        toast({
-          title: "Transaction History",
-          description: `Found ${txData.result?.length || 0} transactions`,
-        });
-      }
-    } catch (error) {
-      console.log('Error fetching transaction history:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch transaction history",
-        variant: "destructive",
-      });
-    }
+    await fetchRecentTransactions();
+    toast({
+      title: "Transaction History",
+      description: `Found ${recentTransactions.length} recent transactions`,
+    });
   };
 
   const getPaymentStatus = (groupId: string, employeeId: string) => {
@@ -541,7 +569,102 @@ const Groups = () => {
               </div>
             </div>
           ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <>
+              {/* Recent Transactions Section */}
+              {(recentTransactions.length > 0 || isLoadingTransactions) && (
+                <div className="mb-8">
+                  <h2 className="text-2xl font-bold mb-4 gradient-text">Recent Transactions</h2>
+                  {isLoadingTransactions ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="flex items-center gap-3">
+                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        <span className="text-muted-foreground">Loading transactions...</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4">
+                    {recentTransactions.map((tx, index) => (
+                      <Card key={index} className="glass-card p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="p-2 bg-green-500/20 rounded-lg">
+                              <CheckCircle className="h-5 w-5 text-green-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium">
+                                {(() => {
+                                  try {
+                                    if (tx.value) {
+                                      const value = parseFloat(tx.value);
+                                      if (value > 0) {
+                                        return `${(value / 1e18).toFixed(4)} ETH`;
+                                      }
+                                    }
+                                    return 'Transaction';
+                                  } catch (e) {
+                                    return 'Transaction';
+                                  }
+                                })()}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {tx.hash ? `${tx.hash.slice(0, 6)}...${tx.hash.slice(-4)}` : 'Unknown hash'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm text-muted-foreground">
+                              {(() => {
+                                try {
+                                  if (tx.timestamp) {
+                                    const date = new Date(tx.timestamp * 1000);
+                                    if (!isNaN(date.getTime())) {
+                                      return date.toLocaleDateString();
+                                    }
+                                    return `Timestamp: ${tx.timestamp}`;
+                                  } else if (tx.block_timestamp) {
+                                    const date = new Date(tx.block_timestamp);
+                                    if (!isNaN(date.getTime())) {
+                                      return date.toLocaleDateString();
+                                    }
+                                    return `Block: ${tx.block_timestamp}`;
+                                  } else if (tx.created_at) {
+                                    const date = new Date(tx.created_at);
+                                    if (!isNaN(date.getTime())) {
+                                      return date.toLocaleDateString();
+                                    }
+                                    return `Created: ${tx.created_at}`;
+                                  }
+                                  return 'No timestamp';
+                                } catch (e) {
+                                  console.log('Date parsing error:', e, tx);
+                                  return `Raw: ${tx.timestamp || tx.block_timestamp || tx.created_at || 'N/A'}`;
+                                }
+                              })()}
+                            </p>
+                            <Badge variant="outline" className="mt-1">
+                              {(() => {
+                                const status = tx.status || tx.result || 'Confirmed';
+                                // Handle different status formats
+                                if (status === 'error' || status === 'failed') {
+                                  return 'Failed';
+                                } else if (status === 'success' || status === 'confirmed') {
+                                  return 'Confirmed';
+                                } else if (status === 'pending') {
+                                  return 'Pending';
+                                }
+                                return status;
+                              })()}
+                            </Badge>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {groups.map((group, index) => (
                 <motion.div
                   key={group.id}
@@ -633,7 +756,8 @@ const Groups = () => {
                   </Card>
                 </motion.div>
               ))}
-            </div>
+              </div>
+            </>
           )}
         </motion.div>
       </div>

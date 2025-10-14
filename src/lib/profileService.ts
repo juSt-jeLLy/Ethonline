@@ -1432,7 +1432,7 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
       
       // Use Supabase function to avoid CORS issues
       const response = await fetch(
-        `https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=optimism-sepolia&address=${employerAddress}&offset=${limit}&api=v1`
+        `https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=optimism-sepolia&address=${employerAddress}&offset=${limit}&api=v2`
       );
       
       if (!response.ok) {
@@ -1474,7 +1474,7 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
       
       // Use Supabase function to avoid CORS issues
       const response = await fetch(
-        `https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=optimism-sepolia&address=${employeeWallet}&offset=${limit}&api=v1`
+        `https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=optimism-sepolia&address=${employeeWallet}&offset=${limit}&api=v2`
       );
       
       if (!response.ok) {
