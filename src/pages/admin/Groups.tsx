@@ -867,7 +867,7 @@ const Groups = () => {
                                 {/* Avai Framework Side (Sender → Solver) */}
                                 <div className="p-4 bg-blue-50/50 rounded-lg border border-blue-200/50">
                                   <div className="flex items-center justify-between mb-2">
-                                    <h4 className="font-semibold text-blue-800">Avai Framework</h4>
+                                    <h4 className="font-semibold text-blue-800">Avail Intent</h4>
                                     {tx.avaiData.status && (
                                       <Badge className={`text-xs ${
                                         tx.avaiData.status === 'SUCCESS' 
