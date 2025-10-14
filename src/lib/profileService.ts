@@ -1,4 +1,4 @@
-import { supabase, Employer, Employee, Employment, Wallet, EmployerProfileData, EmployeeProfileData } from './supabase'
+import { supabase, Employer, Employee, Employment, Wallet, EmployerProfileData, EmployeeProfileData, Payment } from './supabase'
 
 export class ProfileService {
   // Save or update employer profile
@@ -1805,6 +1805,171 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
 
     } catch (error) {
       console.error('Error fetching employee dashboard stats:', error);
+      return { success: false, error: error.message, data: null };
+    }
+  }
+
+  // Save payment to database
+  static async savePayment(paymentData: {
+    employment_id: string;
+    employer_id: string;
+    employee_id: string;
+    chain: string;
+    token: string;
+    token_contract?: string;
+    token_decimals?: number;
+    amount_token: string;
+    recipient: string;
+    tx_hash?: string;
+    status?: 'pending' | 'confirmed' | 'failed';
+    period_start?: string;
+    period_end?: string;
+  }) {
+    try {
+      const { data, error } = await supabase
+        .from('payments')
+        .insert({
+          employment_id: paymentData.employment_id,
+          employer_id: paymentData.employer_id,
+          employee_id: paymentData.employee_id,
+          chain: paymentData.chain,
+          token: paymentData.token,
+          token_contract: paymentData.token_contract,
+          token_decimals: paymentData.token_decimals,
+          amount_token: paymentData.amount_token,
+          recipient: paymentData.recipient,
+          tx_hash: paymentData.tx_hash,
+          status: paymentData.status || 'pending',
+          period_start: paymentData.period_start,
+          period_end: paymentData.period_end,
+          pay_date: new Date().toISOString().split('T')[0] // Current date in YYYY-MM-DD format
+        })
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      console.error('Error saving payment:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Get payments for an employer
+  static async getEmployerPayments(employerId: string, limit: number = 50) {
+    try {
+      const { data, error } = await supabase
+        .from('payments')
+        .select(`
+          *,
+          employments!inner(
+            id,
+            role,
+            payment_amount,
+            payment_frequency,
+            employees!inner(
+              id,
+              first_name,
+              last_name,
+              email
+            )
+          )
+        `)
+        .eq('employer_id', employerId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        throw error;
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      console.error('Error fetching employer payments:', error);
+      return { success: false, error: error.message, data: null };
+    }
+  }
+
+  // Get payments for an employee
+  static async getEmployeePayments(employeeId: string, limit: number = 50) {
+    try {
+      const { data, error } = await supabase
+        .from('payments')
+        .select(`
+          *,
+          employments!inner(
+            id,
+            role,
+            payment_amount,
+            payment_frequency,
+            employers!inner(
+              id,
+              name,
+              email
+            )
+          )
+        `)
+        .eq('employee_id', employeeId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        throw error;
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      console.error('Error fetching employee payments:', error);
+      return { success: false, error: error.message, data: null };
+    }
+  }
+
+  // Update payment status (e.g., when transaction is confirmed)
+  static async updatePaymentStatus(paymentId: string, status: 'pending' | 'confirmed' | 'failed', tx_hash?: string) {
+    try {
+      const updateData: any = { status };
+      if (tx_hash) {
+        updateData.tx_hash = tx_hash;
+      }
+
+      const { data, error } = await supabase
+        .from('payments')
+        .update(updateData)
+        .eq('id', paymentId)
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      console.error('Error updating payment status:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Find employment_id by employer_id and employee_id
+  static async findEmploymentId(employerId: string, employeeId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('employments')
+        .select('id')
+        .eq('employer_id', employerId)
+        .eq('employee_id', employeeId)
+        .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      return { success: true, data: data?.id || null };
+    } catch (error) {
+      console.error('Error finding employment_id:', error);
       return { success: false, error: error.message, data: null };
     }
   }

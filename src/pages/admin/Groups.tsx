@@ -5,7 +5,7 @@ import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, DollarSign, Calendar, Edit, Send, Loader2, ExternalLink, CheckCircle, XCircle } from "lucide-react";
+import { Building2, Users, DollarSign, Calendar, Edit, Send, Loader2, ExternalLink, CheckCircle, XCircle, RefreshCw, Receipt } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 // Removed Blockscout SDK imports since we're using Supabase function instead
 import { ProfileService } from "@/lib/profileService";
@@ -99,6 +99,8 @@ const Groups = () => {
   const [paymentStatus, setPaymentStatus] = useState<{ [key: string]: 'success' | 'error' | 'processing' }>({});
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
+  const [databasePayments, setDatabasePayments] = useState<any[]>([]);
+  const [isLoadingDatabasePayments, setIsLoadingDatabasePayments] = useState(false);
 
   // Helper function to convert token amounts to USDC equivalent
   const convertToUSDC = (amount: number, token: string): number => {
@@ -160,8 +162,9 @@ const Groups = () => {
   useEffect(() => {
     if (address) {
       fetchRecentTransactions();
+      fetchDatabasePayments();
     }
-  }, [address]);
+  }, [address, groups]);
 
   // Function to fetch wallet data for employees and calculate proper totals
   const processGroupsWithWalletData = async (groups: any[]) => {
@@ -183,7 +186,8 @@ const Groups = () => {
                 wallet_address: walletResult.data.account_address || '',
                 chain: walletResult.data.chain || employee.chain || 'ethereum',
                 token: walletResult.data.token || employee.token || 'usdc',
-                payment_amount: (parseFloat(employee.payment_amount?.toString() || '0')).toString()
+                payment_amount: (parseFloat(employee.payment_amount?.toString() || '0')).toString(),
+                employment_id: employee.employment_id // Ensure employment_id is preserved
               };
               
               employeesWithWallets.push(employeeWithWallet);
@@ -195,7 +199,8 @@ const Groups = () => {
               employeesWithWallets.push({
                 ...employee,
                 wallet_address: '',
-                payment_amount: (parseFloat(employee.payment_amount?.toString() || '0')).toString()
+                payment_amount: (parseFloat(employee.payment_amount?.toString() || '0')).toString(),
+                employment_id: employee.employment_id // Ensure employment_id is preserved
               });
               
               // Still add to USDC total for accurate reporting
@@ -206,7 +211,8 @@ const Groups = () => {
             employeesWithWallets.push({
               ...employee,
               wallet_address: '',
-              payment_amount: (parseFloat(employee.payment_amount?.toString() || '0')).toString()
+              payment_amount: (parseFloat(employee.payment_amount?.toString() || '0')).toString(),
+              employment_id: employee.employment_id // Ensure employment_id is preserved
             });
             
             // Still add to USDC total for accurate reporting
@@ -300,6 +306,52 @@ const Groups = () => {
       if (transferResult.success) {
         setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'success' }));
         
+        // Save payment to database
+        try {
+          console.log('Saving payment with employment_id:', employee.employment_id);
+          console.log('Employee data:', employee);
+          console.log('Group employer ID:', group.employer?.id);
+          
+          // If employment_id is missing, try to find it from the database
+          let employmentId = employee.employment_id;
+          if (!employmentId && group.employer?.id) {
+            console.warn('employment_id is missing, attempting to find it from database...');
+            try {
+              const employmentResult = await ProfileService.findEmploymentId(group.employer.id, employee.id);
+              if (employmentResult.success && employmentResult.data) {
+                employmentId = employmentResult.data;
+                console.log('Found employment_id:', employmentId);
+              } else {
+                console.error('Could not find employment_id:', employmentResult.error);
+              }
+            } catch (error) {
+              console.error('Error finding employment_id:', error);
+            }
+          }
+          
+          const paymentResult = await ProfileService.savePayment({
+            employment_id: employmentId || null, // Allow null for now
+            employer_id: group.employer?.id,
+            employee_id: employee.id,
+            chain: employee.chain,
+            token: employee.token,
+            token_contract: employee.token_contract,
+            token_decimals: employee.token_decimals,
+            amount_token: employee.payment_amount || '0',
+            recipient: employee.wallet_address,
+            tx_hash: transferResult.transactionHash,
+            status: 'confirmed'
+          });
+
+          if (paymentResult.success) {
+            console.log('Payment saved to database:', paymentResult.data);
+          } else {
+            console.error('Failed to save payment to database:', paymentResult.error);
+          }
+        } catch (dbError) {
+          console.error('Error saving payment to database:', dbError);
+        }
+        
         toast({
           title: "🎉 Payment Successful!",
           description: `Sent ${parseFloat(employee.payment_amount || '0').toFixed(2)} ${tokenType} to ${employee.first_name} ${employee.last_name}`,
@@ -320,10 +372,10 @@ const Groups = () => {
                 console.log('Transaction data from Blockscout:', txData);
                 // You can show this data in a toast or modal if needed
               }
-            } catch (txError) {
+          } catch (txError) {
               console.log('Transaction lookup not available:', txError);
               // This is not a critical error, just a nice-to-have feature
-            }
+          }
           }, 5000); // Wait 5 seconds
         }
 
@@ -633,6 +685,29 @@ const Groups = () => {
     }
   };
 
+  const fetchDatabasePayments = async () => {
+    if (!address) return;
+
+    setIsLoadingDatabasePayments(true);
+    try {
+      // Get the current user's employer ID from the first group
+      if (groups.length > 0 && groups[0].employer?.id) {
+        const paymentsResult = await ProfileService.getEmployerPayments(groups[0].employer.id, 10);
+        
+        if (paymentsResult.success && paymentsResult.data) {
+          console.log('Database payments:', paymentsResult.data);
+          setDatabasePayments(paymentsResult.data);
+        } else {
+          console.error('Error fetching database payments:', paymentsResult.error);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching database payments:', error);
+    } finally {
+      setIsLoadingDatabasePayments(false);
+    }
+  };
+
   const fetchRecentTransactions = async () => {
     if (!address) return;
 
@@ -783,6 +858,138 @@ const Groups = () => {
             </div>
           ) : (
             <>
+              {/* Payment Groups Section */}
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {groups.map((group, index) => (
+                <motion.div
+                  key={group.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                >
+                  <Card className="glass-card p-6 hover-lift h-full">
+                    <div className="space-y-4">
+                      <div className="flex items-start justify-between">
+                        <div className="p-3 bg-gradient-to-r from-primary to-blue-500 rounded-xl">
+                          <Building2 className="h-6 w-6 text-white" />
+                        </div>
+                        <Badge className="bg-green-500/20 text-green-700 hover:bg-green-500/30">
+                          {group.status}
+                        </Badge>
+                      </div>
+
+                      <div>
+                        <h3 className="text-xl font-bold mb-2">{group.name}</h3>
+                        {group.employer && (
+                          <p className="text-sm text-muted-foreground">
+                            {group.employer.email}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-3 pt-2 border-t border-white/20">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                            <Users className="h-4 w-4" />
+                            Employees
+                          </div>
+                          <div className="font-semibold">{group.employees}</div>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                            <DollarSign className="h-4 w-4" />
+                            Total Payment
+                          </div>
+                          <div className="font-bold gradient-text">
+                            {formatTotalPayment(group)}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                            <Calendar className="h-4 w-4" />
+                            Next Payment
+                          </div>
+                          <div className="text-sm font-medium">{group.nextPayment}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 pt-4">
+                        <Button
+                          variant="outline"
+                          className="flex-1 glass-card border-white/20"
+                          onClick={() => navigate(`/admin/edit-group/${group.id}`)}
+                        >
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit Group
+                        </Button>
+                        <Button
+                          className="flex-1 bg-gradient-to-r from-primary to-cyan-500 hover:opacity-90"
+                          onClick={() => handlePayAllEmployees(group)}
+                          disabled={
+                            isProcessingPayment === group.id || 
+                            !group.employeeDetails || 
+                            group.employeeDetails.length === 0 ||
+                            group.employeeDetails.filter(emp => 
+                              emp.wallet_address && 
+                              emp.wallet_address.trim() !== '' && 
+                              emp.payment_amount && 
+                              emp.payment_amount > 0
+                            ).length === 0
+                          }
+                        >
+                          {isProcessingPayment === group.id ? (
+                            <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Processing...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="mr-2 h-4 w-4" />
+                              Pay All
+                            </>
+                          )}
+                        </Button>
+                      </div>
+
+                      {/* Employee List */}
+                      {group.employeeDetails && group.employeeDetails.length > 0 && (
+                        <div className="pt-4 border-t border-white/20">
+                          <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Employees</h4>
+                          <div className="space-y-2">
+                            {group.employeeDetails.slice(0, 3).map((employee, empIndex) => (
+                              <div key={empIndex} className="flex items-center justify-between text-sm">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 bg-primary rounded-full"></div>
+                                  <span>{employee.first_name} {employee.last_name}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-muted-foreground">
+                                    {parseFloat(employee.payment_amount?.toString() || '0').toFixed(2)} {employee.token?.toUpperCase()}
+                                  </span>
+                                  {employee.wallet_address ? (
+                                    <CheckCircle className="h-4 w-4 text-green-500" />
+                                  ) : (
+                                    <XCircle className="h-4 w-4 text-red-500" />
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                            {group.employeeDetails.length > 3 && (
+                              <div className="text-xs text-muted-foreground text-center pt-1">
+                                +{group.employeeDetails.length - 3} more employees
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                </motion.div>
+              ))}
+              </div>
+
               {/* Recent Transactions Section */}
               {(recentTransactions.length > 0 || isLoadingTransactions) && (
                 <div className="mb-8">
@@ -982,99 +1189,116 @@ const Groups = () => {
                 </div>
               )}
 
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {groups.map((group, index) => (
-                <motion.div
-                  key={group.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <Card className="glass-card p-6 hover-lift h-full">
-                    <div className="space-y-4">
-                      <div className="flex items-start justify-between">
-                        <div className="p-3 bg-gradient-to-r from-primary to-blue-500 rounded-xl">
-                          <Building2 className="h-6 w-6 text-white" />
-                        </div>
-                        <Badge className="bg-green-500/20 text-green-700 hover:bg-green-500/30">
-                          {group.status}
-                        </Badge>
+              {/* Database Payments Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-bold gradient-text">Database Payment History</h2>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={fetchDatabasePayments}
+                    disabled={isLoadingDatabasePayments}
+                  >
+                    {isLoadingDatabasePayments ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Refresh
+                      </>
+                    )}
+                  </Button>
+                </div>
+                
+                {isLoadingDatabasePayments ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <span className="ml-2">Loading database payments...</span>
+                  </div>
+                ) : databasePayments.length === 0 ? (
+                  <Card className="glass-card p-8 text-center">
+                    <div className="flex flex-col items-center space-y-4">
+                      <div className="p-4 bg-muted/50 rounded-full">
+                        <Receipt className="h-8 w-8 text-muted-foreground" />
                       </div>
-
                       <div>
-                        <h3 className="text-xl font-bold mb-2">{group.name}</h3>
-                        {group.employer && (
-                          <p className="text-sm text-muted-foreground">
-                            {group.employer.email}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="space-y-3 pt-2 border-t border-white/20">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                            <Users className="h-4 w-4" />
-                            Employees
-                          </div>
-                          <div className="font-semibold">{group.employees}</div>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                            <DollarSign className="h-4 w-4" />
-                            Total Payment
-                          </div>
-                          <div className="font-bold gradient-text">
-                            {formatTotalPayment(group)}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                            <Calendar className="h-4 w-4" />
-                            Next Payment
-                          </div>
-                          <div className="text-sm font-medium">{group.nextPayment}</div>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2 pt-4">
-                        <Button
-                          variant="outline"
-                          className="flex-1 glass-card border-white/20"
-                          onClick={() => navigate(`/admin/edit-group/${group.id}`)}
-                        >
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit Group
-                        </Button>
-                        <Button
-                          className="flex-1 bg-gradient-to-r from-primary to-cyan-500 hover:opacity-90"
-                          onClick={() => handlePayAllEmployees(group)}
-                          disabled={
-                            isProcessingPayment === group.id || 
-                            !group.employeeDetails || 
-                            group.employeeDetails.length === 0 ||
-                            group.employeeDetails.filter(emp => 
-                              emp.wallet_address && 
-                              emp.wallet_address.trim() !== '' && 
-                              emp.payment_amount && 
-                              emp.payment_amount > 0
-                            ).length === 0
-                          }
-                        >
-                          {isProcessingPayment === group.id ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <Send className="mr-2 h-4 w-4" />
-                          )}
-                          {isProcessingPayment === group.id ? "Processing..." : "Pay All"}
-                        </Button>
+                        <h3 className="text-lg font-semibold mb-2">No Database Payments Yet</h3>
+                        <p className="text-muted-foreground">
+                          Payments will appear here once they are processed and saved to the database.
+                        </p>
                       </div>
                     </div>
                   </Card>
-                </motion.div>
-              ))}
+                ) : (
+                  <div className="grid gap-4">
+                    {databasePayments.map((payment, index) => (
+                      <Card key={payment.id} className="glass-card p-6">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <div className="p-2 bg-blue-500/20 rounded-lg">
+                                <Receipt className="h-5 w-5 text-blue-600" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-lg">Database Payment</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {payment.employments?.employees?.first_name} {payment.employments?.employees?.last_name}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-semibold">
+                                {payment.amount_token} {payment.token?.toUpperCase()}
+                              </p>
+                              <Badge variant="outline" className="mt-1">
+                                {payment.status}
+                              </Badge>
+                            </div>
+                          </div>
+                          
+                          <div className="grid md:grid-cols-2 gap-4 pt-4 border-t border-white/20">
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Employee:</span>
+                                <span>{payment.employments?.employees?.first_name} {payment.employments?.employees?.last_name}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Role:</span>
+                                <span>{payment.employments?.role}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Recipient:</span>
+                                <span className="font-mono text-xs">{payment.recipient?.slice(0, 6)}...{payment.recipient?.slice(-4)}</span>
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Chain:</span>
+                                <span>{payment.chain}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Pay Date:</span>
+                                <span>{new Date(payment.pay_date).toLocaleDateString()}</span>
+                              </div>
+                              {payment.tx_hash && (
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">TX Hash:</span>
+                                  <span className="font-mono text-xs">{payment.tx_hash.slice(0, 6)}...{payment.tx_hash.slice(-4)}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </div>
+
             </>
           )}
         </motion.div>
