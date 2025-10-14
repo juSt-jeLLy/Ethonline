@@ -55,6 +55,8 @@ const Employment = () => {
   const [monitoringCleanup, setMonitoringCleanup] = useState<(() => void) | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [isLoadingRecentTransactions, setIsLoadingRecentTransactions] = useState(false);
+  const [databasePayments, setDatabasePayments] = useState<any[]>([]);
+  const [isLoadingDatabasePayments, setIsLoadingDatabasePayments] = useState(false);
 
   // For testing - use well-known addresses
   const TEST_EMPLOYER_ADDRESS = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"; // Vitalik's address for testing
@@ -158,6 +160,28 @@ const Employment = () => {
     }
   };
 
+  const fetchDatabasePayments = async () => {
+    if (!employmentData?.employee?.id) return;
+
+    setIsLoadingDatabasePayments(true);
+    try {
+      const paymentsResult = await ProfileService.getEmployeePayments(employmentData.employee.id, 10);
+      
+      if (paymentsResult.success && paymentsResult.data) {
+        console.log('Database payments:', paymentsResult.data);
+        setDatabasePayments(paymentsResult.data);
+      } else {
+        console.error('Error fetching database payments:', paymentsResult.error);
+        setDatabasePayments([]);
+      }
+    } catch (error) {
+      console.error('Error fetching database payments:', error);
+      setDatabasePayments([]);
+    } finally {
+      setIsLoadingDatabasePayments(false);
+    }
+  };
+
   // Start/stop transaction monitoring
   const toggleMonitoring = () => {
     if (isMonitoring) {
@@ -200,6 +224,7 @@ const Employment = () => {
   useEffect(() => {
     if (employmentData) {
       loadTransactionData();
+      fetchDatabasePayments();
     }
   }, [employmentData]);
 
@@ -340,32 +365,38 @@ const Employment = () => {
             </Card>
           </motion.div>
 
-          {/* Payment History */}
+
+
+          {/* Database Payment History Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
+            transition={{ delay: 0.4 }}
             className="space-y-4"
           >
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold flex items-center gap-2">
-                <Clock className="h-6 w-6 text-primary" />
+                <Bell className="h-6 w-6 text-primary" />
                 Payment History
               </h2>
               <div className="flex gap-2">
-                <Button
-                  onClick={loadTransactionData}
-                  disabled={isLoadingTransactions}
-                  variant="outline"
-                  size="sm"
-                  className="glass-card border-white/20"
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={fetchDatabasePayments}
+                  disabled={isLoadingDatabasePayments}
                 >
-                  {isLoadingTransactions ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                  {isLoadingDatabasePayments ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Loading...
+                    </>
                   ) : (
-                    <RefreshCw className="h-4 w-4" />
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh
+                    </>
                   )}
-                  Refresh
                 </Button>
                 <Button
                   onClick={toggleMonitoring}
@@ -378,164 +409,103 @@ const Employment = () => {
                 </Button>
               </div>
             </div>
-
-            {isLoadingTransactions ? (
-              <Card className="glass-card p-8">
+            
+            {isLoadingDatabasePayments ? (
+              <Card className="glass-card p-6">
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
-                  <span className="text-muted-foreground">Loading transaction data...</span>
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    <span>Loading payment history...</span>
+                  </div>
                 </div>
               </Card>
-            ) : paymentTransactions.length > 0 ? (
-              <div className="space-y-3">
-                {paymentTransactions.map((transaction, index) => (
-                  <motion.div
-                    key={transaction.hash}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.3 + index * 0.1 }}
-                  >
-                    <Card className="glass-card p-6 hover-lift">
+            ) : databasePayments.length === 0 ? (
+              <Card className="glass-card p-6">
+                <div className="text-center py-8">
+                  <Bell className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-muted-foreground">No payment history found</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Payments will appear here once they are processed and saved to the database.
+                  </p>
+                </div>
+              </Card>
+            ) : (
+              <div className="grid gap-4">
+                {databasePayments.map((payment, index) => (
+                  <Card key={payment.id} className="glass-card p-6">
+                    <div className="space-y-4">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center space-x-3">
                           <div className="p-2 bg-green-500/20 rounded-lg">
                             <CheckCircle2 className="h-5 w-5 text-green-600" />
                           </div>
                           <div>
-                            <div className="font-semibold">
-                              Payment Received - {new Date(transaction.timestamp).toLocaleDateString()}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {new Date(transaction.timestamp).toLocaleString()}
-                            </div>
-                            <div className="text-xs text-muted-foreground font-mono">
-                              {transaction.hash.slice(0, 10)}...{transaction.hash.slice(-8)}
-                            </div>
+                            <p className="font-medium text-lg">Payment Received</p>
+                            <p className="text-sm text-muted-foreground">
+                              {payment.employments?.employers?.name || 'Employer'}
+                            </p>
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="font-bold text-lg gradient-text">
-                            {transaction.valueFormatted} ETH
-                          </div>
-                          <Badge className="bg-green-500/20 text-green-700 hover:bg-green-500/30">
-                            {transaction.status}
+                          <p className="font-semibold">
+                            {payment.amount_token} {payment.token?.toUpperCase()}
+                          </p>
+                          <Badge variant="outline" className="mt-1">
+                            {payment.status}
                           </Badge>
-                          <div className="mt-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => window.open(`https://eth.blockscout.com/tx/${transaction.hash}`, '_blank')}
-                              className="text-xs"
-                            >
-                              <ExternalLink className="h-3 w-3 mr-1" />
-                              View on Blockscout
-                            </Button>
-                          </div>
                         </div>
                       </div>
-                    </Card>
-                  </motion.div>
+                      
+                      <div className="grid md:grid-cols-2 gap-4 pt-4 border-t border-white/20">
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Employer:</span>
+                            <span>{payment.employments?.employers?.name || 'N/A'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Role:</span>
+                            <span>{payment.employments?.role}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Recipient:</span>
+                            <span className="font-mono text-xs">{payment.recipient?.slice(0, 6)}...{payment.recipient?.slice(-4)}</span>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Chain:</span>
+                            <span>{payment.chain}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Pay Date:</span>
+                            <span>{new Date(payment.pay_date).toLocaleDateString()}</span>
+                          </div>
+                          {payment.tx_hash && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">TX Hash:</span>
+                              <span className="font-mono text-xs">{payment.tx_hash.slice(0, 6)}...{payment.tx_hash.slice(-4)}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
                 ))}
               </div>
-            ) : (
-              <Card className="glass-card p-8">
-                <div className="text-center py-8">
-                  <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No Payment History Yet</h3>
-                  <p className="text-muted-foreground mb-4">
-                    No payments have been detected from your employer yet.
-                  </p>
-                  <div className="mt-4 p-4 bg-blue-50/50 rounded-lg">
-                    <p className="text-sm text-blue-700">
-                      <strong>Expected Payment:</strong> {employmentData.monthlyPayment.toFixed(6)} {employmentData.token.toUpperCase()} {employmentData.paymentFrequency}
-                    </p>
-                    <p className="text-xs text-blue-600 mt-1">
-                      <strong>Test Employer:</strong> {TEST_EMPLOYER_ADDRESS.slice(0, 10)}...{TEST_EMPLOYER_ADDRESS.slice(-8)}
-                    </p>
-                  </div>
-                </div>
-              </Card>
             )}
           </motion.div>
 
-          {/* Employer Transaction Summary */}
+          {/* Recent Wallet Transactions Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="space-y-4"
-          >
-            <h2 className="text-2xl font-bold flex items-center gap-2">
-              <Building2 className="h-6 w-6 text-primary" />
-              Employer Activity Summary
-            </h2>
-
-            {employerTransactions.length > 0 ? (
-              <Card className="glass-card p-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">Recent Employer Transactions</h3>
-                    <Badge className="bg-blue-500/20 text-blue-700">
-                      {employerTransactions.length} transactions
-                    </Badge>
-                  </div>
-                  
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {employerTransactions.slice(0, 10).map((transaction, index) => (
-                      <div key={transaction.hash} className="flex items-center justify-between p-3 bg-white/20 rounded-lg">
-                        <div className="flex-1">
-                          <div className="text-sm font-medium">
-                            {new Date(transaction.timestamp).toLocaleDateString()}
-                          </div>
-                          <div className="text-xs text-muted-foreground font-mono">
-                            {transaction.hash.slice(0, 10)}...{transaction.hash.slice(-8)}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm font-semibold">
-                            {transaction.valueFormatted} ETH
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            to {transaction.to.slice(0, 6)}...{transaction.to.slice(-4)}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  <div className="text-center">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => window.open(`https://eth.blockscout.com/address/${TEST_EMPLOYER_ADDRESS}`, '_blank')}
-                      className="glass-card border-white/20"
-                    >
-                      <ExternalLink className="h-4 w-4 mr-1" />
-                      View Full History on Blockscout
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ) : (
-              <Card className="glass-card p-6">
-                <div className="text-center py-4">
-                  <Building2 className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-muted-foreground">No employer transactions found</p>
-                </div>
-              </Card>
-            )}
-          </motion.div>
-
-          {/* Recent Transactions Section */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
+            transition={{ delay: 0.5 }}
             className="space-y-4"
           >
             <h2 className="text-2xl font-bold flex items-center gap-2">
               <RefreshCw className="h-6 w-6 text-primary" />
-              Recent Transactions
+              Recent Wallet Transactions
             </h2>
 
             {isLoadingRecentTransactions ? (
@@ -643,6 +613,7 @@ const Employment = () => {
               </Card>
             )}
           </motion.div>
+
         </motion.div>
       </div>
     </div>
