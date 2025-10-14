@@ -19,11 +19,14 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <Web3Provider>
-      <NotificationProvider>
-        <TransactionPopupProvider>
+const App = () => {
+  const blockscoutApiKey = import.meta.env.VITE_BLOCKSCOUT_API_KEY;
+  
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Web3Provider>
+        <NotificationProvider apiKey={blockscoutApiKey}>
+          <TransactionPopupProvider apiKey={blockscoutApiKey}>
           <TooltipProvider>
             <Toaster />
             <Sonner />
@@ -107,6 +110,7 @@ const App = () => (
       </NotificationProvider>
     </Web3Provider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;

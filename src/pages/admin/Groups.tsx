@@ -283,10 +283,19 @@ const Groups = () => {
 
         // Show transaction in Blockscout if available
         if (transferResult.transactionHash) {
+          console.log(`Transaction successful: ${transferResult.transactionHash} on chain ${destinationChainId}`);
+          
           try {
-            await openTxToast(destinationChainId.toString(), transferResult.transactionHash);
+            // Use Supabase function to avoid CORS issues
+            const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?hash=${transferResult.transactionHash}`);
+            if (response.ok) {
+              const txData = await response.json();
+              console.log('Transaction data from Blockscout:', txData);
+              // You can show this data in a toast or modal if needed
+            }
           } catch (txError) {
-            console.log('Could not open transaction toast:', txError);
+            console.log('Transaction lookup not available:', txError);
+            // This is not a critical error, just a nice-to-have feature
           }
         }
 

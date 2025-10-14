@@ -212,9 +212,16 @@ const EditGroup = () => {
         description: `Processing payment for ${employee.first_name} ${employee.last_name}`,
       });
 
-      // Use Blockscout SDK to show transaction toast
-      // Using Ethereum mainnet (chain ID "1") for demo
-      await openTxToast("1", knownGoodTxHash);
+      // Use Supabase function to lookup transaction
+      try {
+        const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?hash=${knownGoodTxHash}`);
+        if (response.ok) {
+          const txData = await response.json();
+          console.log('Demo transaction data from Blockscout:', txData);
+        }
+      } catch (error) {
+        console.log('Transaction lookup not available:', error);
+      }
       
     } catch (error) {
       console.error('Error processing payment:', error);
