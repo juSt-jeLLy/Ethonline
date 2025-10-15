@@ -36,7 +36,7 @@ Are there any cases where the user funds are taken but then the solvers can't ma
 **Problem**: During development, we encountered a "Token not supported on this chain" error when trying to transfer USDT on Sepolia testnet.
 
 **Root Cause**: The AVAIL SDK contained incorrect USDT contract addresses for several testnets:
-- Optimism Sepolia USDT address was incorrect
+- Optimism Sepolia USDT address was incorrect and USDT was not supported on sepolia while it said it was on the sdk
 - Multiple token addresses in the constants file were outdated or pointing to EOA addresses
 
 **Evidence**: 
