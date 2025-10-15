@@ -46,4 +46,6 @@ Are there any cases where the user funds are taken but then the solvers can't ma
 
 **Impact**: This blocked our development workflow and required manual investigation to identify the root cause.
 
-**Resolution**: We reported this issue to the AVAIL team during the hackathon, and they promptly addressed it by merging a pull request that updated the incorrect USDT addresses across multiple testnets
+**Resolution**: We reported this issue to the AVAIL team during the hackathon, and they promptly addressed it by merging a pull request that updated the incorrect USDT addresses across multiple testnets including Optimism Sepolia, Arbitrum Sepolia, and Monad Testnet.
+
+**Pull Request**: [availproject/nexus-sdk#49](https://github.com/availproject/nexus-sdk/pull/49/commits/ea8850d7240bede57e98f1c7b6283ec85e47c86d)
