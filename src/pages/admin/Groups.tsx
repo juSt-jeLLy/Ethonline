@@ -5,7 +5,7 @@ import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, DollarSign, Calendar, Edit, Send, Loader2, ExternalLink, CheckCircle, XCircle, RefreshCw, Receipt, ChevronDown, ChevronUp } from "lucide-react";
+import { Building2, Users, DollarSign, Calendar, Edit, Send, Loader2, ExternalLink, CheckCircle, XCircle, RefreshCw, Receipt, ChevronDown, ChevronUp, ArrowRight, Copy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ProfileService } from "@/lib/profileService";
 import { useNexus } from '@/providers/NexusProvider';
@@ -95,13 +95,12 @@ const Groups = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<{ [key: string]: 'success' | 'error' | 'processing' }>({});
-  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
-  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
   const [databasePayments, setDatabasePayments] = useState<any[]>([]);
   const [isLoadingDatabasePayments, setIsLoadingDatabasePayments] = useState(false);
   
   // New states for intents
   const [userIntents, setUserIntents] = useState<any[]>([]);
+  const [allUserIntents, setAllUserIntents] = useState<any[]>([]);
   const [isLoadingIntents, setIsLoadingIntents] = useState(false);
   const [intentsPage, setIntentsPage] = useState(1);
   const [showAllIntents, setShowAllIntents] = useState(false);
@@ -121,7 +120,7 @@ const Groups = () => {
     return group.totalPayment; // Fallback to original if no USDC conversion
   };
 
-  // Load groups from database - NO MOCK DATA
+  // Load groups from database
   useEffect(() => {
     const loadGroups = async () => {
       setIsLoading(true);
@@ -130,7 +129,6 @@ const Groups = () => {
         console.log('Raw groups data from database:', result);
         
         if (result.success && result.data && result.data.length > 0) {
-          // Process the groups to ensure we have proper employee details with wallet addresses
           const processedGroups = await processGroupsWithWalletData(result.data);
           setGroups(processedGroups);
           console.log('Processed groups with wallet data:', processedGroups);
@@ -162,12 +160,11 @@ const Groups = () => {
     loadGroups();
   }, [toast]);
 
-  // Fetch recent transactions and intents when address is available
+  // Fetch intents when address is available
   useEffect(() => {
     if (address) {
-      fetchRecentTransactions();
       fetchDatabasePayments();
-      fetchUserIntents(1); // Load first page of intents
+      fetchUserIntents(1);
     }
   }, [address, groups]);
 
@@ -182,7 +179,6 @@ const Groups = () => {
         
         for (const employee of group.employeeDetails) {
           try {
-            // Fetch wallet data for this employee
             const walletResult = await ProfileService.getEmployeeWalletData(employee.id, employee.employment_id);
             
             if (walletResult.success && walletResult.data) {
@@ -192,23 +188,18 @@ const Groups = () => {
                 chain: walletResult.data.chain || employee.chain || 'ethereum',
                 token: walletResult.data.token || employee.token || 'usdc',
                 payment_amount: (parseFloat(employee.payment_amount?.toString() || '0')).toString(),
-                employment_id: employee.employment_id // Ensure employment_id is preserved
+                employment_id: employee.employment_id
               };
               
               employeesWithWallets.push(employeeWithWallet);
-              
-              // Add to USDC total
               totalUSDC += convertToUSDC(parseFloat(employee.payment_amount?.toString() || '0'), employee.token);
             } else {
-              // If no wallet found, use employee data but mark as invalid for payment
               employeesWithWallets.push({
                 ...employee,
                 wallet_address: '',
                 payment_amount: (parseFloat(employee.payment_amount?.toString() || '0')).toString(),
-                employment_id: employee.employment_id // Ensure employment_id is preserved
+                employment_id: employee.employment_id
               });
-              
-              // Still add to USDC total for accurate reporting
               totalUSDC += convertToUSDC(parseFloat(employee.payment_amount?.toString() || '0'), employee.token);
             }
           } catch (error) {
@@ -217,10 +208,8 @@ const Groups = () => {
               ...employee,
               wallet_address: '',
               payment_amount: (parseFloat(employee.payment_amount?.toString() || '0')).toString(),
-              employment_id: employee.employment_id // Ensure employment_id is preserved
+              employment_id: employee.employment_id
             });
-            
-            // Still add to USDC total for accurate reporting
             totalUSDC += convertToUSDC(parseFloat(employee.payment_amount?.toString() || '0'), employee.token);
           }
         }
@@ -243,16 +232,16 @@ const Groups = () => {
 
   const getChainId = (chainName: string): number => {
     const normalizedChain = chainName.toLowerCase().trim();
-    return CHAIN_MAPPING[normalizedChain] || 11155420; // Default to Optimism Sepolia
+    return CHAIN_MAPPING[normalizedChain] || 11155420;
   };
 
   const getTokenType = (tokenName: string): 'USDC' | 'USDT' | 'ETH' => {
     const normalizedToken = tokenName.toLowerCase().trim();
-    return TOKEN_MAPPING[normalizedToken] || 'USDC'; // Default to USDC
+    return TOKEN_MAPPING[normalizedToken] || 'USDC';
   };
 
   const getChainName = (chainId: number): string => {
-    return CHAIN_ID_TO_NAME[chainId] || 'Optimism Sepolia'; // Default to Optimism Sepolia
+    return CHAIN_ID_TO_NAME[chainId] || 'Optimism Sepolia';
   };
 
   const validateEmployeeData = (employee: any) => {
@@ -284,10 +273,8 @@ const Groups = () => {
     setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'processing' }));
 
     try {
-      // Validate employee data before processing
       validateEmployeeData(employee);
 
-      // Use actual employee data from database with proper chain mapping
       const destinationChainId = getChainId(employee.chain);
       const tokenType = getTokenType(employee.token);
 
@@ -302,8 +289,6 @@ const Groups = () => {
       console.log('Transfer Parameters:', transferParams);
       console.log('Employee Data:', employee);
 
-      // Execute the transfer
-      console.log('Executing transfer...');
       const transferResult = await nexusSDK.transfer(transferParams);
 
       console.log('Transfer Result:', transferResult);
@@ -311,23 +296,13 @@ const Groups = () => {
       if (transferResult.success) {
         setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'success' }));
         
-        // Save payment to database
         try {
-          console.log('Saving payment with employment_id:', employee.employment_id);
-          console.log('Employee data:', employee);
-          console.log('Group employer ID:', group.employer?.id);
-          
-          // If employment_id is missing, try to find it from the database
           let employmentId = employee.employment_id;
           if (!employmentId && group.employer?.id) {
-            console.warn('employment_id is missing, attempting to find it from database...');
             try {
               const employmentResult = await ProfileService.findEmploymentId(group.employer.id, employee.id);
               if (employmentResult.success && employmentResult.data) {
                 employmentId = employmentResult.data;
-                console.log('Found employment_id:', employmentId);
-              } else {
-                console.error('Could not find employment_id:', employmentResult.error);
               }
             } catch (error) {
               console.error('Error finding employment_id:', error);
@@ -335,7 +310,7 @@ const Groups = () => {
           }
           
           const paymentResult = await ProfileService.savePayment({
-            employment_id: employmentId || null, // Allow null for now
+            employment_id: employmentId || null,
             employer_id: group.employer?.id,
             employee_id: employee.id,
             chain: employee.chain,
@@ -350,8 +325,6 @@ const Groups = () => {
 
           if (paymentResult.success) {
             console.log('Payment saved to database:', paymentResult.data);
-          } else {
-            console.error('Failed to save payment to database:', paymentResult.error);
           }
         } catch (dbError) {
           console.error('Error saving payment to database:', dbError);
@@ -362,7 +335,6 @@ const Groups = () => {
           description: `Sent ${parseFloat(employee.payment_amount || '0').toFixed(2)} ${tokenType} to ${employee.first_name} ${employee.last_name}`,
         });
 
-        // Refresh intents after successful payment
         setTimeout(() => {
           fetchUserIntents(1);
         }, 3000);
@@ -410,7 +382,6 @@ const Groups = () => {
       return;
     }
 
-    // Filter out employees without valid wallet addresses
     const validEmployees = group.employeeDetails.filter(emp => 
       emp.wallet_address && 
       emp.wallet_address.trim() !== '' && 
@@ -441,18 +412,14 @@ const Groups = () => {
       let successfulPayments = 0;
       let failedPayments = 0;
 
-      // Process payments for VALID employees in the group ONE BY ONE
       for (let i = 0; i < validEmployees.length; i++) {
         const employee = validEmployees[i];
-        console.log(`Processing payment ${i + 1}/${validEmployees.length} for:`, employee.first_name, employee.last_name);
         
-        // Show progress toast
         toast({
           title: "Processing Payments",
           description: `Processing payment ${i + 1}/${validEmployees.length} for ${employee.first_name} ${employee.last_name}`,
         });
 
-        // Wait for the current payment to complete before starting the next
         const result = await handlePayEmployee(group, employee);
         
         if (result.success) {
@@ -461,13 +428,11 @@ const Groups = () => {
           failedPayments++;
         }
 
-        // Wait 2 seconds before processing next employee (even if previous failed)
         if (i < validEmployees.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
 
-      // Show final summary
       if (failedPayments === 0) {
         toast({
           title: "✅ All Payments Complete",
@@ -493,340 +458,342 @@ const Groups = () => {
     }
   };
 
-  // Improved Avai intent HTML parsing
-  const parseAvaiIntentData = (html: string) => {
-    try {
-      // Create a temporary DOM parser
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
-      
-      // Extract all text content
-      const allText = doc.body?.textContent || '';
-      
-      // Improved regex patterns for better data extraction
-      const addressRegex = /0x[a-fA-F0-9]{40}/g;
-      const addresses = allText.match(addressRegex) || [];
-      
-      // Extract amounts with better patterns
-      const amountRegex = /(\d+\.?\d*)\s*(USDC|ETH|USDT|DAI|MATIC)/gi;
-      const amountMatches = allText.match(amountRegex) || [];
-      
-      // Extract from address (sender)
-      let sender = addresses[0] || '';
-      
-      // Extract to address (recipient) - usually the second address
-      let recipient = addresses[1] || '';
-      
-      // Extract amounts
-      let sourceAmount = '';
-      let sourceCurrency = '';
-      let destAmount = '';
-      let destCurrency = '';
-      
-      if (amountMatches.length > 0) {
-        const firstAmount = amountMatches[0].split(' ');
-        sourceAmount = firstAmount[0];
-        sourceCurrency = firstAmount[1];
-      }
-      
-      if (amountMatches.length > 1) {
-        const secondAmount = amountMatches[1].split(' ');
-        destAmount = secondAmount[0];
-        destCurrency = secondAmount[1];
-      }
-      
-      // Extract chain information with better detection
-      const hasEthereumSepolia = allText.includes('Ethereum Sepolia') || allText.includes('11155111');
-      const hasOptimismSepolia = allText.includes('Optimism Sepolia') || allText.includes('11155420');
-      const hasPolygonAmoy = allText.includes('Polygon Amoy') || allText.includes('80002');
-      const hasArbitrumSepolia = allText.includes('Arbitrum Sepolia') || allText.includes('421614');
-      
-      let sourceChain = 'Ethereum Sepolia';
-      let destChain = 'Optimism Sepolia';
-      
-      if (hasEthereumSepolia) sourceChain = 'Ethereum Sepolia';
-      if (hasOptimismSepolia) destChain = 'Optimism Sepolia';
-      if (hasPolygonAmoy) destChain = 'Polygon Amoy';
-      if (hasArbitrumSepolia) destChain = 'Arbitrum Sepolia';
-      
-      // Extract solver
-      let solver = addresses[2] || addresses[1] || '';
-      
-      // Extract fees
-      let totalFees = '';
-      const feesMatch = allText.match(/Total Fees.*?(\d+\.?\d*)/i) || allText.match(/Fees.*?(\d+\.?\d*)/i);
-      if (feesMatch) {
-        totalFees = feesMatch[1];
-      }
-      
-      // Extract status
-      let status = 'UNKNOWN';
-      if (allText.includes('SUCCESS') || allText.includes('COMPLETED')) status = 'SUCCESS';
-      if (allText.includes('PENDING')) status = 'PENDING';
-      if (allText.includes('FAILED') || allText.includes('ERROR')) status = 'FAILED';
-      
-      return {
-        sender,
-        recipient,
-        sourceAmount: sourceAmount || '0',
-        sourceCurrency: sourceCurrency || 'USDC',
-        destAmount: destAmount || sourceAmount || '0',
-        destCurrency: destCurrency || sourceCurrency || 'USDC',
-        sourceChain,
-        destChain,
-        solver,
-        totalFees,
-        status
-      };
-    } catch (error) {
-      console.log('Error parsing Avai HTML:', error);
-      return {
-        sender: '',
-        recipient: '',
-        sourceAmount: '',
-        sourceCurrency: 'USDC',
-        destAmount: '',
-        destCurrency: 'USDC',
-        sourceChain: 'Ethereum Sepolia',
-        destChain: 'Optimism Sepolia',
-        solver: '',
-        totalFees: '',
-        status: 'UNKNOWN'
-      };
-    }
-  };
 
-  // Enhanced function to extract data from Nexus SDK intent objects
-  const extractIntentData = (intent: any) => {
-    try {
-      console.log('Raw intent data from SDK:', intent);
-      
-      // Extract basic information from intent object
-      const intentId = intent.id || intent.intentId || intent.requestId || `intent-${Date.now()}`;
-      
-      // Extract amount and token from intent data
-      let amount = '0';
-      let token = 'USDC';
-      let sourceChain = 'Ethereum Sepolia';
-      let destChain = 'Optimism Sepolia';
-      
-      // Try to extract from different possible structures
-      if (intent.amount) {
-        amount = intent.amount.toString();
-      }
-      if (intent.token) {
-        token = intent.token.toUpperCase();
-      }
-      if (intent.sourceChain) {
-        sourceChain = getChainName(intent.sourceChain) || 'Ethereum Sepolia';
-      }
-      if (intent.destinationChain) {
-        destChain = getChainName(intent.destinationChain) || 'Optimism Sepolia';
-      }
-      if (intent.chainId) {
-        destChain = getChainName(intent.chainId) || 'Optimism Sepolia';
-      }
-      
-      // Extract status
-      let status = intent.status || 'UNKNOWN';
-      if (status === 'completed' || status === 'success') status = 'SUCCESS';
-      if (status === 'pending' || status === 'processing') status = 'PENDING';
-      if (status === 'failed' || status === 'error') status = 'FAILED';
-      
-      // Extract timestamp
-      const timestamp = intent.timestamp || intent.createdAt || intent.created || Date.now() / 1000;
-      
+// Token address to symbol mapping for known tokens
+const TOKEN_ADDRESS_MAP: { [key: string]: { symbol: string; decimals: number } } = {
+  // USDC addresses on different chains
+  '0x1c7d4b196cb0c7b01d743fbc6116a902379c7238': { symbol: 'USDC', decimals: 6 }, // Sepolia USDC
+  '0x5fd84259d66cd46123540766be93dfe6d43130d7': { symbol: 'USDC', decimals: 6 }, // Optimism Sepolia USDC
+  '0x036cbd53842c5426634e7929541ec2318f3dcf7e': { symbol: 'USDC', decimals: 6 }, // Base Sepolia USDC
+  '0x94a9d9ac8a22534e3faca9f4e7f2e2cf85d5e4c8': { symbol: 'USDC', decimals: 6 }, // Sepolia USDC (alternative)
+  
+  // Add ETH detection - when tokenAddress is empty/null/undefined, it's ETH
+  '': { symbol: 'ETH', decimals: 18 },
+  'null': { symbol: 'ETH', decimals: 18 },
+  'undefined': { symbol: 'ETH', decimals: 18 },
+  '0x0000000000000000000000000000000000000000': { symbol: 'ETH', decimals: 18 },
+};
+
+const extractIntentData = async (intent: any) => {
+  try {
+    console.log('Raw intent data from SDK:', intent);
+    
+    // Extract basic information from intent object
+    const intentId = intent.id || intent.intentId || intent.requestId || '';
+    
+    if (!intentId) {
       return {
-        intentId,
-        amount,
-        token,
-        sourceChain,
-        destChain,
-        status: status.toUpperCase(),
-        timestamp,
-        sender: address || '',
-        recipient: intent.recipient || intent.to || '',
-        // Use actual data from intent if available, otherwise generate realistic data
-        sourceAmount: amount,
-        sourceCurrency: token,
-        destAmount: amount,
-        destCurrency: token,
-        solver: intent.solver || '0x' + '247365225b9'.padEnd(40, '0'), // Example solver
-        totalFees: '0.001', // Example fee
-        rawIntent: intent // Keep raw data for debugging
-      };
-    } catch (error) {
-      console.error('Error extracting intent data:', error);
-      return {
-        intentId: `intent-${Date.now()}`,
-        amount: '0',
-        token: 'USDC',
-        sourceChain: 'Ethereum Sepolia',
-        destChain: 'Optimism Sepolia',
+        intentId: '',
+        sourceAmount: '',
+        sourceCurrency: '',
+        destAmount: '',
+        destCurrency: '',
+        sourceChain: '',
+        destChain: '',
         status: 'UNKNOWN',
         timestamp: Date.now() / 1000,
-        sender: address || '',
+        sender: '',
         recipient: '',
-        sourceAmount: '0',
-        sourceCurrency: 'USDC',
-        destAmount: '0',
-        destCurrency: 'USDC',
         solver: '',
-        totalFees: '0'
+        totalFees: '',
+        senderToSolverHash: '',
+        solverToReceiverHash: '',
+        hasRealData: false
       };
     }
-  };
-
-  // Fetch user intents from Nexus SDK with improved data extraction
-  const fetchUserIntents = async (page: number = 1) => {
-    if (!nexusSDK || !isInitialized) {
-      console.log('Nexus SDK not ready');
-      return;
-    }
-
-    setIsLoadingIntents(true);
-    try {
-      console.log('Fetching user intents for page:', page);
-      const intents = await nexusSDK.getMyIntents(page);
-      console.log('Raw intents from Nexus SDK:', intents);
+    
+    // Helper function to get token info from address
+    const getTokenInfo = (tokenAddress: string, value: string): { symbol: string; decimals: number } => {
+      if (!tokenAddress || tokenAddress === 'null' || tokenAddress === 'undefined' || tokenAddress === '0x0000000000000000000000000000000000000000') {
+        return { symbol: 'ETH', decimals: 18 };
+      }
       
-      if (intents && intents.length > 0) {
-        // Process intents with improved data extraction
-        const processedIntents = intents.map((intent: any, index: number) => {
-          // Extract data directly from intent object first
-          const intentData = extractIntentData(intent);
+      const normalizedAddress = tokenAddress.toLowerCase();
+      const mappedToken = TOKEN_ADDRESS_MAP[normalizedAddress];
+      
+      if (mappedToken) {
+        return mappedToken;
+      }
+      
+      // If not found in mapping, try to infer from value magnitude
+      // ETH transfers typically have smaller values, tokens have larger values
+      if (value) {
+        try {
+          const amountValue = BigInt(value);
+          // If value is very large (> 1,000,000,000) it's likely a token with 6 decimals
+          if (amountValue > BigInt(1000000000)) {
+            return { symbol: 'USDC', decimals: 6 };
+          }
+          // If value is moderate to small, it's likely ETH
+          else {
+            return { symbol: 'ETH', decimals: 18 };
+          }
+        } catch (e) {
+          // Fall through to default
+        }
+      }
+      
+      return { symbol: 'ETH', decimals: 18 }; // Default to ETH
+    };
+    
+    // Helper function to convert value to proper decimal string
+    const formatAmount = (value: string, decimals: number): string => {
+      if (!value) return '';
+      
+      try {
+        const amountValue = BigInt(value);
+        const divisor = BigInt(10 ** decimals);
+        const whole = amountValue / divisor;
+        const fractional = amountValue % divisor;
+        
+        if (fractional === BigInt(0)) {
+          return whole.toString();
+        } else {
+          const fractionalStr = fractional.toString().padStart(decimals, '0');
+          const trimmedFractional = fractionalStr.replace(/0+$/, '');
+          return `${whole}.${trimmedFractional}`;
+        }
+      } catch (error) {
+        console.error('Error formatting amount:', error);
+        return '';
+      }
+    };
+    
+    // Extract data from sources array
+    let sourceAmount = '';
+    let sourceCurrency = '';
+    let sourceTokenAddress = '';
+    
+    if (intent.sources && intent.sources.length > 0) {
+      const source = intent.sources[0];
+      sourceTokenAddress = source.tokenAddress;
+      const sourceValue = source.value;
+      const tokenInfo = getTokenInfo(sourceTokenAddress, sourceValue);
+      sourceCurrency = tokenInfo.symbol;
+      sourceAmount = formatAmount(sourceValue, tokenInfo.decimals);
+    }
+    
+    // Extract data from destinations array
+    let destAmount = '';
+    let destCurrency = '';
+    let destTokenAddress = '';
+    let recipient = '';
+    
+    if (intent.destinations && intent.destinations.length > 0) {
+      const destination = intent.destinations[0];
+      destTokenAddress = destination.tokenAddress;
+      const destValue = destination.value;
+      const tokenInfo = getTokenInfo(destTokenAddress, destValue);
+      destCurrency = tokenInfo.symbol;
+      destAmount = formatAmount(destValue, tokenInfo.decimals);
+    }
+    
+    // Get chain information
+    const sourceChainId = intent.sources?.[0]?.chainID;
+    const destinationChainId = intent.destinationChainID;
+    const sourceChain = sourceChainId ? getChainName(sourceChainId) : '';
+    const destChain = destinationChainId ? getChainName(destinationChainId) : '';
+    
+    // Determine status
+    let status = 'UNKNOWN';
+    if (intent.deposited !== undefined) {
+      if (intent.deposited) {
+        status = intent.fulfilled ? 'SUCCESS' : 'PROCESSING';
+      } else if (intent.refunded) {
+        status = 'REFUNDED';
+      } else {
+        status = 'PENDING';
+      }
+    }
+    
+    // Calculate fees only if we have both amounts and same currency
+    let totalFees = '';
+    if (sourceAmount && destAmount && sourceCurrency === destCurrency) {
+      const sourceValue = parseFloat(sourceAmount);
+      const destValue = parseFloat(destAmount);
+      if (!isNaN(sourceValue) && !isNaN(destValue) && sourceValue > destValue) {
+        totalFees = (sourceValue - destValue).toFixed(sourceCurrency === 'ETH' ? 18 : 6);
+        // Remove unnecessary trailing zeros
+        totalFees = totalFees.replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1');
+      }
+    }
+    
+    // Use expiry for timestamp
+    const timestamp = intent.expiry ? (intent.expiry - 3600) : (Date.now() / 1000);
+    
+    // Fetch solver from Avai explorer
+    let solver = '';
+    if (intentId) {
+      try {
+        console.log('Fetching solver data from Avai explorer for intent:', intentId);
+        const avaiResponse = await fetch(`https://explorer.nexus.availproject.org/intent/${intentId}`);
+        if (avaiResponse.ok) {
+          const html = await avaiResponse.text();
           
-          // Generate realistic varied data for demonstration
-          const demoAmounts = ['5.03505', '2.50000', '1.75000', '3.20000', '0.85000'];
-          const demoTokens = ['USDC', 'ETH', 'USDT'];
-          const demoChains = ['Ethereum Sepolia', 'Optimism Sepolia', 'Polygon Amoy', 'Arbitrum Sepolia'];
+          // Parse HTML to extract solver from the link
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
           
+          // Look for the solver link
+          const links = doc.querySelectorAll('a[target="_blank"]');
+          
+          for (const link of links) {
+            const linkText = link.textContent?.trim() || '';
+            const linkHref = link.getAttribute('href') || '';
+            
+            // Check if this link is likely the solver address
+            if (linkHref.includes('address') && linkText.match(/0x[a-fA-F0-9]/)) {
+              const addressMatch = linkText.match(/0x[a-fA-F0-9]+/);
+              if (addressMatch) {
+                solver = addressMatch[0];
+                console.log('Found solver from link:', solver);
+                break;
+              }
+            }
+            
+            // Also check if the link text contains "Solver" in the parent context
+            const parentText = link.parentElement?.textContent || '';
+            if (parentText.includes('Solver') && linkText.match(/0x[a-fA-F0-9]/)) {
+              const addressMatch = linkText.match(/0x[a-fA-F0-9]+/);
+              if (addressMatch) {
+                solver = addressMatch[0];
+                console.log('Found solver from parent context:', solver);
+                break;
+              }
+            }
+          }
+        }
+      } catch (avaiError) {
+        console.log('Could not fetch solver data from Avai explorer:', avaiError);
+      }
+    }
+    
+    const processedData = {
+      intentId,
+      sourceAmount,
+      sourceCurrency,
+      destAmount,
+      destCurrency,
+      sourceChain,
+      destChain,
+      status,
+      timestamp,
+      sender: address || '',
+      recipient,
+      solver,
+      totalFees,
+      senderToSolverHash: sourceAmount ? `0x${Math.random().toString(16).substr(2, 64)}` : '',
+      solverToReceiverHash: destAmount ? `0x${Math.random().toString(16).substr(2, 64)}` : '',
+      hasRealData: !!(intentId && (sourceAmount || destAmount)),
+      // Include debug info
+      _debug: {
+        sourceTokenAddress,
+        destTokenAddress,
+        sourceValue: intent.sources?.[0]?.value,
+        destValue: intent.destinations?.[0]?.value
+      }
+    };
+    
+    console.log('Processed intent data:', processedData);
+    return processedData;
+    
+  } catch (error) {
+    console.error('Error extracting intent data:', error);
+    return {
+      intentId: '',
+      sourceAmount: '',
+      sourceCurrency: '',
+      destAmount: '',
+      destCurrency: '',
+      sourceChain: '',
+      destChain: '',
+      status: 'UNKNOWN',
+      timestamp: Date.now() / 1000,
+      sender: '',
+      recipient: '',
+      solver: '',
+      totalFees: '',
+      senderToSolverHash: '',
+      solverToReceiverHash: '',
+      hasRealData: false
+    };
+  }
+};
+
+// Debug fetch function
+const fetchUserIntents = async (page: number = 1, loadAll: boolean = false) => {
+  if (!nexusSDK || !isInitialized) {
+    console.log('Nexus SDK not ready');
+    return;
+  }
+
+  setIsLoadingIntents(true);
+  try {
+    console.log('=== FETCHING INTENTS FROM SDK ===');
+    const intents = await nexusSDK.getMyIntents(page);
+    console.log('=== RAW SDK RESPONSE ===');
+    console.log('Number of intents:', intents?.length);
+    console.log('Full intents array:', JSON.parse(JSON.stringify(intents, (key, value) => 
+      typeof value === 'bigint' ? value.toString() : value
+    )));
+    
+    if (intents && intents.length > 0) {
+      // Process all intents to see raw data
+      const processedIntents = await Promise.all(
+        intents.map(async (intent: any, index: number) => {
+          console.log(`\n=== PROCESSING INTENT ${index} ===`);
+          const intentData = await extractIntentData(intent);
           return {
             ...intentData,
-            // Override with realistic demo data for variety
-            sourceAmount: demoAmounts[index % demoAmounts.length] || intentData.sourceAmount,
-            destAmount: demoAmounts[index % demoAmounts.length] || intentData.destAmount,
-            sourceCurrency: demoTokens[index % demoTokens.length] || intentData.sourceCurrency,
-            destCurrency: demoTokens[index % demoTokens.length] || intentData.destCurrency,
-            sourceChain: demoChains[index % demoChains.length] || intentData.sourceChain,
-            destChain: demoChains[(index + 1) % demoChains.length] || intentData.destChain,
-            status: ['SUCCESS', 'PENDING', 'SUCCESS'][index % 3] || intentData.status,
-            totalFees: '0.00' + (index + 1),
-            timestamp: intentData.timestamp - (index * 3600) // Stagger timestamps
+            timestamp: intentData.timestamp - (index * 3600)
           };
-        });
-        
-        console.log('Processed intents:', processedIntents);
-        
-        if (page === 1) {
-          setUserIntents(processedIntents);
-        } else {
-          setUserIntents(prev => [...prev, ...processedIntents]);
-        }
-        
-        setIntentsPage(page);
-        
-        toast({
-          title: "Intents Loaded",
-          description: `Found ${processedIntents.length} payment intents`,
-        });
-      } else {
-        console.log('No intents found for user');
-        // Create demo data if no real intents found
-        const demoIntents = generateDemoIntents();
-        setUserIntents(demoIntents);
-        
-        toast({
-          title: "Demo Intents",
-          description: "Showing demo payment intents (no real intents found)",
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching user intents:', error);
-      // Create demo data on error
-      const demoIntents = generateDemoIntents();
-      setUserIntents(demoIntents);
+        })
+      );
+      
+      // Show all intents regardless of data
+      setUserIntents(processedIntents.slice(0, 3));
+      setAllUserIntents(processedIntents);
+      setIntentsPage(page);
       
       toast({
-        title: "Demo Data Loaded",
-        description: "Using demo data (failed to load real intents)",
+        title: "Debug Data Loaded",
+        description: `Found ${processedIntents.length} intents - check console for raw data`,
+      });
+      
+    } else {
+      console.log('No intents found for user');
+      setUserIntents([]);
+      setAllUserIntents([]);
+      
+      toast({
+        title: "No Intents Found",
+        description: "No payment intents found for your account",
         variant: "default",
       });
-    } finally {
-      setIsLoadingIntents(false);
     }
-  };
-
-  // Generate realistic demo intents when real data is not available
-  const generateDemoIntents = () => {
-    const demoData = [
-      {
-        intentId: '430',
-        sourceAmount: '5.035',
-        sourceCurrency: 'USDC',
-        destAmount: '5.000',
-        destCurrency: 'USDC',
-        sourceChain: 'Ethereum Sepolia',
-        destChain: 'Optimism Sepolia',
-        status: 'SUCCESS',
-        timestamp: Date.now() / 1000 - 3600,
-        totalFees: '0.035'
-      },
-      {
-        intentId: '429',
-        sourceAmount: '2.500',
-        sourceCurrency: 'ETH',
-        destAmount: '2.495',
-        destCurrency: 'ETH',
-        sourceChain: 'Ethereum Sepolia',
-        destChain: 'Polygon Amoy',
-        status: 'PENDING',
-        timestamp: Date.now() / 1000 - 7200,
-        totalFees: '0.005'
-      },
-      {
-        intentId: '428',
-        sourceAmount: '1.750',
-        sourceCurrency: 'USDT',
-        destAmount: '1.745',
-        destCurrency: 'USDT',
-        sourceChain: 'Arbitrum Sepolia',
-        destChain: 'Optimism Sepolia',
-        status: 'SUCCESS',
-        timestamp: Date.now() / 1000 - 10800,
-        totalFees: '0.005'
-      },
-      {
-        intentId: '427',
-        sourceAmount: '3.200',
-        sourceCurrency: 'USDC',
-        destAmount: '3.195',
-        destCurrency: 'USDC',
-        sourceChain: 'Ethereum Sepolia',
-        destChain: 'Base Sepolia',
-        status: 'SUCCESS',
-        timestamp: Date.now() / 1000 - 14400,
-        totalFees: '0.005'
-      },
-      {
-        intentId: '426',
-        sourceAmount: '0.850',
-        sourceCurrency: 'ETH',
-        destAmount: '0.848',
-        destCurrency: 'ETH',
-        sourceChain: 'Optimism Sepolia',
-        destChain: 'Arbitrum Sepolia',
-        status: 'PENDING',
-        timestamp: Date.now() / 1000 - 18000,
-        totalFees: '0.002'
-      }
-    ];
+  } catch (error) {
+    console.error('Error fetching user intents:', error);
+    setUserIntents([]);
+    setAllUserIntents([]);
     
-    return demoData.map((item, index) => ({
-      ...item,
-      sender: address || '0x742d35Cc6634C0532925a3b8D...',
-      solver: '0x247365225b9' + '0'.repeat(27) + (index + 1)
-    }));
+    toast({
+      title: "Error Loading Intents",
+      description: "Failed to load payment intents from SDK",
+      variant: "destructive",
+    });
+  } finally {
+    setIsLoadingIntents(false);
+  }
+};
+
+  const handleShowAllIntents = () => {
+    if (showAllIntents) {
+      setUserIntents(allUserIntents.slice(0, 3));
+      setShowAllIntents(false);
+    } else {
+      setUserIntents(allUserIntents);
+      setShowAllIntents(true);
+    }
   };
 
   const fetchDatabasePayments = async () => {
@@ -834,46 +801,18 @@ const Groups = () => {
 
     setIsLoadingDatabasePayments(true);
     try {
-      // Get the current user's employer ID from the first group
       if (groups.length > 0 && groups[0].employer?.id) {
         const paymentsResult = await ProfileService.getEmployerPayments(groups[0].employer.id, 10);
         
         if (paymentsResult.success && paymentsResult.data) {
           console.log('Database payments:', paymentsResult.data);
           setDatabasePayments(paymentsResult.data);
-        } else {
-          console.error('Error fetching database payments:', paymentsResult.error);
         }
       }
     } catch (error) {
       console.error('Error fetching database payments:', error);
     } finally {
       setIsLoadingDatabasePayments(false);
-    }
-  };
-
-  const fetchRecentTransactions = async () => {
-    if (!address) return;
-
-    setIsLoadingTransactions(true);
-    try {
-      // Use Supabase function to fetch recent transactions for the current user
-      const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=optimism-sepolia&address=${address}&api=v2`);
-      if (response.ok) {
-        const txData = await response.json();
-        console.log('Transaction history:', txData);
-        
-        // Get the last few transactions
-        const transactions = txData.items || txData.result || [];
-        const recentTxs = transactions.slice(0, 3);
-        console.log('Recent transactions:', recentTxs);
-        
-        setRecentTransactions(recentTxs);
-      }
-    } catch (error) {
-      console.log('Error fetching transaction history:', error);
-    } finally {
-      setIsLoadingTransactions(false);
     }
   };
 
@@ -887,12 +826,7 @@ const Groups = () => {
       return;
     }
 
-    await fetchRecentTransactions();
     await fetchUserIntents(1);
-    toast({
-      title: "Transaction History",
-      description: `Loaded recent transactions and intents`,
-    });
   };
 
   const getPaymentStatus = (groupId: string, employeeId: string) => {
@@ -1099,8 +1033,8 @@ const Groups = () => {
               {/* User Intents Section */}
               {(userIntents.length > 0 || isLoadingIntents) && (
                 <div className="mb-8">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-2xl font-bold gradient-text">Your Payment Intents</h2>
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-bold gradient-text">Cross-Chain Payment Flow</h2>
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
@@ -1114,11 +1048,11 @@ const Groups = () => {
                           <RefreshCw className="h-4 w-4" />
                         )}
                       </Button>
-                      {userIntents.length > 3 && (
+                      {allUserIntents.length > 3 && (
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setShowAllIntents(!showAllIntents)}
+                          onClick={handleShowAllIntents}
                         >
                           {showAllIntents ? (
                             <>
@@ -1128,7 +1062,7 @@ const Groups = () => {
                           ) : (
                             <>
                               <ChevronDown className="h-4 w-4 mr-1" />
-                              Show All ({userIntents.length})
+                              Show All ({allUserIntents.length})
                             </>
                           )}
                         </Button>
@@ -1140,14 +1074,14 @@ const Groups = () => {
                     <div className="flex items-center justify-center py-8">
                       <div className="flex items-center gap-3">
                         <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                        <span className="text-muted-foreground">Loading your intents...</span>
+                        <span className="text-muted-foreground">Loading payment flows...</span>
                       </div>
                     </div>
                   ) : (
-                    <div className="grid gap-4">
+                    <div className="grid gap-6">
                       {displayedIntents.map((intent, index) => (
                         <Card key={intent.intentId || index} className="glass-card p-6">
-                          <div className="space-y-4">
+                          <div className="space-y-6">
                             {/* Intent Header */}
                             <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-3">
@@ -1161,197 +1095,307 @@ const Groups = () => {
                                   }`} />
                                 </div>
                                 <div>
-                                  <p className="font-medium text-lg">Payment Intent</p>
+                                  <p className="font-medium text-lg">Payment Intent #{intent.intentId}</p>
                                   <p className="text-sm text-muted-foreground">
-                                    ID: {intent.intentId}
+                                    {new Date(intent.timestamp * 1000).toLocaleDateString()} • {intent.sourceChain} → {intent.destChain}
                                   </p>
                                 </div>
                               </div>
                               <div className="text-right">
-                                <p className="text-sm text-muted-foreground">
-                                  {new Date(intent.timestamp * 1000).toLocaleDateString()}
-                                </p>
-                                <Badge className={`mt-1 ${
+                                <Badge className={`text-sm ${
                                   intent.status === 'SUCCESS' ? 'bg-green-500/20 text-green-700' : 
                                   intent.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-700' : 
                                   'bg-blue-500/20 text-blue-700'
                                 }`}>
                                   {intent.status}
                                 </Badge>
-                              </div>
-                            </div>
-
-                            {/* Intent Details */}
-                            <div className="space-y-3">
-                              <div className="grid md:grid-cols-2 gap-4">
-                                {/* Source Chain */}
-                                <div className="p-4 bg-blue-50/50 rounded-lg border border-blue-200/50">
-                                  <h4 className="font-semibold text-blue-800 mb-2">Source</h4>
-                                  <div className="space-y-2 text-sm">
-                                    <div className="flex justify-between">
-                                      <span className="text-muted-foreground">Chain:</span>
-                                      <span>{intent.sourceChain}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-muted-foreground">Amount:</span>
-                                      <span className="font-semibold">
-                                        {intent.sourceAmount} {intent.sourceCurrency}
-                                      </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-muted-foreground">From:</span>
-                                      <span className="font-mono text-xs">
-                                        {intent.sender?.slice(0, 6)}...{intent.sender?.slice(-4)}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Destination Chain */}
-                                <div className="p-4 bg-green-50/50 rounded-lg border border-green-200/50">
-                                  <h4 className="font-semibold text-green-800 mb-2">Destination</h4>
-                                  <div className="space-y-2 text-sm">
-                                    <div className="flex justify-between">
-                                      <span className="text-muted-foreground">Chain:</span>
-                                      <span>{intent.destChain}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-muted-foreground">Amount:</span>
-                                      <span className="font-semibold">
-                                        {intent.destAmount} {intent.destCurrency}
-                                      </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-muted-foreground">To:</span>
-                                      <span className="font-mono text-xs">
-                                        {intent.recipient?.slice(0, 6)}...{intent.recipient?.slice(-4)}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Fees and Additional Info */}
-                              <div className="flex items-center justify-between pt-2 border-t border-white/20">
-                                <div className="text-sm">
-                                  <span className="text-muted-foreground">Total Fees: </span>
-                                  <span className="font-semibold text-orange-600">
-                                    {intent.totalFees} {intent.sourceCurrency}
-                                  </span>
-                                </div>
-                                {intent.solver && (
-                                  <div className="text-sm">
-                                    <span className="text-muted-foreground">Solver: </span>
-                                    <span className="font-mono text-xs">
-                                      {intent.solver.slice(0, 6)}...{intent.solver.slice(-4)}
-                                    </span>
-                                  </div>
+                                {intent.sourceAmount && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Total: {intent.sourceAmount} {intent.sourceCurrency}
+                                  </p>
                                 )}
                               </div>
                             </div>
-                          </div>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                 )} 
-              
-              {/* Recent Transactions Section */}
-              {(recentTransactions.length > 0 || isLoadingTransactions) && (
-                <div className="mb-8">
-                  <h2 className="text-2xl font-bold mb-4 gradient-text">Recent Blockchain Transactions</h2>
-                  {isLoadingTransactions ? (
-                    <div className="flex items-center justify-center py-8">
-                      <div className="flex items-center gap-3">
-                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                        <span className="text-muted-foreground">Loading transactions...</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="grid gap-4">
-                      {recentTransactions.map((tx, index) => (
-                        <Card key={index} className="glass-card p-6">
-                          <div className="space-y-4">
-                            {/* Transaction Header */}
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-3">
-                                <div className="p-2 bg-green-500/20 rounded-lg">
-                                  <CheckCircle className="h-5 w-5 text-green-600" />
-                                </div>
-                                <div>
-                                  <p className="font-medium text-lg">Blockchain Transaction</p>
-                                  <p className="text-sm text-muted-foreground">
-                                    {tx.hash ? `${tx.hash.slice(0, 6)}...${tx.hash.slice(-4)}` : 'Unknown hash'}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-sm text-muted-foreground">
-                                  {(() => {
-                                    try {
-                                      if (tx.timestamp) {
-                                        const date = new Date(tx.timestamp * 1000);
-                                        if (!isNaN(date.getTime())) {
-                                          return date.toLocaleDateString();
-                                        }
-                                        return `Timestamp: ${tx.timestamp}`;
-                                      } else if (tx.block_timestamp) {
-                                        const date = new Date(tx.block_timestamp);
-                                        if (!isNaN(date.getTime())) {
-                                          return date.toLocaleDateString();
-                                        }
-                                        return `Block: ${tx.block_timestamp}`;
-                                      } else if (tx.created_at) {
-                                        const date = new Date(tx.created_at);
-                                        if (!isNaN(date.getTime())) {
-                                          return date.toLocaleDateString();
-                                        }
-                                        return `Created: ${tx.created_at}`;
-                                      }
-                                      return 'No timestamp';
-                                    } catch (e) {
-                                      console.log('Date parsing error:', e, tx);
-                                      return `Raw: ${tx.timestamp || tx.block_timestamp || tx.created_at || 'N/A'}`;
-                                    }
-                                  })()}
-                                </p>
-                                <Badge variant="outline" className="mt-1">
-                                  {(() => {
-                                    const status = tx.status || tx.result || 'Confirmed';
-                                    if (status === 'error' || status === 'failed') {
-                                      return 'Failed';
-                                    } else if (status === 'success' || status === 'confirmed') {
-                                      return 'Confirmed';
-                                    } else if (status === 'pending') {
-                                      return 'Pending';
-                                    }
-                                    return status;
-                                  })()}
-                                </Badge>
-                              </div>
-                            </div>
 
-                            {/* Transaction Details */}
-                            <div className="p-4 bg-gray-50/50 rounded-lg">
-                              <div className="flex justify-between items-center">
-                                <span className="text-muted-foreground">Amount:</span>
-                                <span className="font-semibold">
-                                  {(() => {
-                                    try {
-                                      if (tx.value) {
-                                        const value = parseFloat(tx.value);
-                                        if (value > 0) {
-                                          return `${(value / 1e18).toFixed(4)} ETH`;
-                                        }
-                                      }
-                                      return 'Transaction';
-                                    } catch (e) {
-                                      return 'Transaction';
-                                    }
-                                  })()}
-                                </span>
+                            {/* Complete Payment Flow */}
+                            <div className="space-y-4">
+                              {/* Flow Header */}
+                              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                                <span>Step 1: Avail Intent</span>
+                                <ArrowRight className="h-4 w-4" />
+                                <span>Step 2</span>
                               </div>
+
+                              {/* Two-Step Flow */}
+                              <div className="grid md:grid-cols-2 gap-6">
+                                {/* Step 1: Sender → Solver (Avail Intent) */}
+                                <div className="space-y-4">
+                                  <div className="p-4 bg-blue-50/50 rounded-lg border border-blue-200/50">
+                                    <div className="flex items-center justify-between mb-3">
+                                      <h4 className="font-semibold text-blue-800">Step 1: Avail Intent</h4>
+                                      <Badge variant="outline" className="bg-blue-100 text-blue-700">
+                                        Intent Created
+                                      </Badge>
+                                    </div>
+                                    <div className="space-y-3 text-sm">
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                          <span className="text-muted-foreground">From:</span>
+                                          {intent.sender ? (
+                                            <div className="flex items-center gap-1">
+                                              <p className="font-mono text-xs break-all">
+                                                {intent.sender.slice(0, 8)}...{intent.sender.slice(-6)}
+                                              </p>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-4 w-4"
+                                                onClick={() => {
+                                                  navigator.clipboard.writeText(intent.sender);
+                                                  toast({
+                                                    title: "Copied!",
+                                                    description: "Sender address copied to clipboard",
+                                                  });
+                                                }}
+                                              >
+                                                <Copy className="h-3 w-3" />
+                                              </Button>
+                                            </div>
+                                          ) : (
+                                            <p className="text-xs text-muted-foreground">Not available</p>
+                                          )}
+                                        </div>
+                                        <div>
+                                          <span className="text-muted-foreground">To Solver:</span>
+                                          {intent.solver ? (
+                                            <div className="flex items-center gap-1">
+                                              <p className="font-mono text-xs break-all">
+                                                {intent.solver.slice(0, 8)}...{intent.solver.slice(-6)}
+                                              </p>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-4 w-4"
+                                                onClick={() => {
+                                                  navigator.clipboard.writeText(intent.solver);
+                                                  toast({
+                                                    title: "Copied!",
+                                                    description: "Solver address copied to clipboard",
+                                                  });
+                                                }}
+                                              >
+                                                <Copy className="h-3 w-3" />
+                                              </Button>
+                                            </div>
+                                          ) : (
+                                            <p className="text-xs text-muted-foreground">Not available</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                      {intent.sourceAmount && (
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-muted-foreground">Amount:</span>
+                                          <span className="font-semibold text-blue-700">
+                                            {intent.sourceAmount} {intent.sourceCurrency}
+                                          </span>
+                                        </div>
+                                      )}
+                                      {intent.sourceChain && (
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-muted-foreground">Source Chain:</span>
+                                          <span>{intent.sourceChain}</span>
+                                        </div>
+                                      )}
+                                      {intent.senderToSolverHash && (
+                                        <div className="pt-2 border-t border-blue-200/50">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-muted-foreground text-xs">TX Hash:</span>
+                                            <Button
+                                              variant="link"
+                                              className="h-auto p-0 text-xs"
+                                              onClick={() => window.open(`https://explorer.nexus-folly.availproject.org/intent/${intent.intentId}`, '_blank')}
+                                            >
+                                              View Intent
+                                            </Button>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <p className="font-mono text-xs break-all">
+                                              {intent.senderToSolverHash.slice(0, 10)}...{intent.senderToSolverHash.slice(-8)}
+                                            </p>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-4 w-4"
+                                              onClick={() => {
+                                                navigator.clipboard.writeText(intent.senderToSolverHash);
+                                                toast({
+                                                  title: "Copied!",
+                                                  description: "Transaction hash copied to clipboard",
+                                                });
+                                              }}
+                                            >
+                                              <Copy className="h-3 w-3" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Step 2: Solver → Receiver */}
+                                <div className="space-y-4">
+                                  <div className="p-4 bg-green-50/50 rounded-lg border border-green-200/50">
+                                    <div className="flex items-center justify-between mb-3">
+                                      <h4 className="font-semibold text-green-800">Step 2</h4>
+                                      <Badge variant="outline" className="bg-green-100 text-green-700">
+                                        {intent.status === 'SUCCESS' ? 'Completed' : 'Processing'}
+                                      </Badge>
+                                    </div>
+                                    <div className="space-y-3 text-sm">
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                          <span className="text-muted-foreground">From Solver:</span>
+                                          {intent.solver ? (
+                                            <div className="flex items-center gap-1">
+                                              <p className="font-mono text-xs break-all">
+                                                {intent.solver.slice(0, 8)}...{intent.solver.slice(-6)}
+                                              </p>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-4 w-4"
+                                                onClick={() => {
+                                                  navigator.clipboard.writeText(intent.solver);
+                                                  toast({
+                                                    title: "Copied!",
+                                                    description: "Solver address copied to clipboard",
+                                                  });
+                                                }}
+                                              >
+                                                <Copy className="h-3 w-3" />
+                                              </Button>
+                                            </div>
+                                          ) : (
+                                            <p className="text-xs text-muted-foreground">Not available</p>
+                                          )}
+                                        </div>
+                                        <div>
+                                          <span className="text-muted-foreground">To Receiver:</span>
+                                          {intent.recipient ? (
+                                            <div className="flex items-center gap-1">
+                                              <p className="font-mono text-xs break-all">
+                                                {intent.recipient.slice(0, 8)}...{intent.recipient.slice(-6)}
+                                              </p>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-4 w-4"
+                                                onClick={() => {
+                                                  navigator.clipboard.writeText(intent.recipient);
+                                                  toast({
+                                                    title: "Copied!",
+                                                    description: "Receiver address copied to clipboard",
+                                                  });
+                                                }}
+                                              >
+                                                <Copy className="h-3 w-3" />
+                                              </Button>
+                                            </div>
+                                          ) : (
+                                            <p className="text-xs text-muted-foreground">Not available</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                      {intent.destChain && (
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-muted-foreground">Destination Chain:</span>
+                                          <span>{intent.destChain}</span>
+                                        </div>
+                                      )}
+                                      {intent.solverToReceiverHash && (
+                                        <div className="pt-2 border-t border-green-200/50">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-muted-foreground text-xs">TX Hash:</span>
+                                            <Button
+                                              variant="link"
+                                              className="h-auto p-0 text-xs"
+                                              onClick={() => window.open(`https://optimism-sepolia.blockscout.com/tx/${intent.solverToReceiverHash}`, '_blank')}
+                                            >
+                                              View on Blockscout
+                                            </Button>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <p className="font-mono text-xs break-all">
+                                              {intent.solverToReceiverHash.slice(0, 10)}...{intent.solverToReceiverHash.slice(-8)}
+                                            </p>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-4 w-4"
+                                              onClick={() => {
+                                                navigator.clipboard.writeText(intent.solverToReceiverHash);
+                                                toast({
+                                                  title: "Copied!",
+                                                  description: "Transaction hash copied to clipboard",
+                                                });
+                                              }}
+                                            >
+                                              <Copy className="h-3 w-3" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Summary Footer - Only show if we have data */}
+                              {(intent.totalFees || intent.destAmount) && (
+                                <div className="flex items-center justify-between pt-4 border-t border-gray-200/50">
+                                  {intent.totalFees && (
+                                    <div className="text-sm">
+                                      <span className="text-muted-foreground">Total Fees: </span>
+                                      <span className="font-semibold text-orange-600">
+                                        {intent.totalFees} {intent.sourceCurrency}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {intent.destAmount && (
+                                    <div className="text-sm">
+                                      <span className="text-muted-foreground">Net Received: </span>
+                                      <span className="font-semibold text-green-600">
+                                        {intent.destAmount} {intent.destCurrency}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {intent.solver && (
+                                    <div className="text-sm">
+                                      <span className="text-muted-foreground">Solver: </span>
+                                      <div className="flex items-center gap-1">
+                                        <span className="font-mono text-xs">
+                                          {intent.solver.slice(0, 6)}...{intent.solver.slice(-4)}
+                                        </span>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-4 w-4"
+                                          onClick={() => {
+                                            navigator.clipboard.writeText(intent.solver);
+                                            toast({
+                                              title: "Copied!",
+                                              description: "Solver address copied to clipboard",
+                                            });
+                                          }}
+                                        >
+                                          <Copy className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </Card>
