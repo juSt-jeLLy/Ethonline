@@ -303,6 +303,7 @@ const Profile = () => {
                         <SelectItem value="usdc">USDC</SelectItem>
                         <SelectItem value="usdt">USDT</SelectItem>
                         <SelectItem value="eth">ETH</SelectItem>
+                        <SelectItem value="pyusd">PYUSD (Sepolia)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

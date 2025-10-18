@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 // Removed Blockscout SDK imports since we're using Supabase function instead
 import { ProfileService } from "@/lib/profileService";
 import { useAccount } from 'wagmi';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Employee {
   id: string;
@@ -62,6 +63,7 @@ const EditGroup = () => {
       'usdc': 1,      // 1 USDC = 1 USDC
       'usdt': 1,      // 1 USDT = 1 USDC (approximate)
       'dai': 1,       // 1 DAI = 1 USDC (approximate)
+      'pyusd': 1,     // 1 PYUSD = 1 USDC (approximate)
     };
     
     const rate = conversionRates[token.toLowerCase()] || 1;
@@ -326,7 +328,7 @@ const EditGroup = () => {
       address: employee.wallet_address,
       name: `${employee.first_name} ${employee.last_name}`,
       payment: "0", // Default payment amount
-      chain: employee.chain || "ethereum",
+      chain: employee.token === 'pyusd' ? 'ethereum' : (employee.chain || "ethereum"), // Set chain to ethereum if token is pyusd
       token: employee.token || "usdc"
     });
     setSearchResults([]);
@@ -575,18 +577,41 @@ const EditGroup = () => {
                   />
                 </div>
                 <div className="grid md:grid-cols-2 gap-4 mt-4">
-                  <Input
-                    placeholder="Chain (e.g., ethereum)"
+                  <Select
                     value={newEmployee.chain}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, chain: e.target.value })}
-                    className="glass-card border-white/20"
-                  />
-                  <Input
-                    placeholder="Token (e.g., usdc)"
+                    onValueChange={(value) => setNewEmployee({ ...newEmployee, chain: value })}
+                  >
+                    <SelectTrigger className="glass-card border-white/20">
+                      <SelectValue placeholder="Select Chain" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ethereum">Sepolia</SelectItem>
+                      <SelectItem value="polygon">Amoy</SelectItem>
+                      <SelectItem value="arbitrum">Arbitrum Sepolia</SelectItem>
+                      <SelectItem value="optimism">Op Sepolia</SelectItem>
+                      <SelectItem value="base">Base Sepolia</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
                     value={newEmployee.token}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, token: e.target.value })}
-                    className="glass-card border-white/20"
-                  />
+                    onValueChange={(value) => {
+                      const updatedEmployee = { ...newEmployee, token: value };
+                      if (value === 'pyusd') {
+                        updatedEmployee.chain = 'ethereum'; // Set chain to Sepolia if PYUSD is selected
+                      }
+                      setNewEmployee(updatedEmployee);
+                    }}
+                  >
+                    <SelectTrigger className="glass-card border-white/20">
+                      <SelectValue placeholder="Select Token" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="usdc">USDC</SelectItem>
+                      <SelectItem value="usdt">USDT</SelectItem>
+                      <SelectItem value="eth">ETH</SelectItem>
+                      <SelectItem value="pyusd">PYUSD</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <Button
                   onClick={handleAddEmployee}

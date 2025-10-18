@@ -10,7 +10,36 @@ import { useToast } from "@/hooks/use-toast";
 // Removed Blockscout SDK imports since we're using Supabase function instead
 import { ProfileService } from "@/lib/profileService";
 import { useNexus } from '@/providers/NexusProvider';
-import { useAccount } from 'wagmi';
+import { useAccount, useWriteContract } from 'wagmi';
+import { parseEther, parseUnits } from 'viem';
+
+// Minimal ERC-20 ABI for the transfer function
+const erc20ABI = [
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "transfer",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+] as const;
 
 interface Group {
   id: string;
@@ -70,12 +99,12 @@ const CHAIN_ID_TO_NAME: { [key: number]: string } = {
   //: 'optimism-sepolia' // Fallback to optimism-sepolia for unsupported chains
 };
 
-// Token mapping to ensure correct token types
-const TOKEN_MAPPING: { [key: string]: 'USDC' | 'USDT' | 'ETH' } = {
+const TOKEN_MAPPING: { [key: string]: 'USDC' | 'USDT' | 'ETH' | 'PYUSD' } = {
   'usdc': 'USDC',
   'usdt': 'USDT', 
   'eth': 'ETH',
-  'ethereum': 'ETH'
+  'ethereum': 'ETH',
+  'pyusd': 'PYUSD'
 };
 
 // Conversion rates to USDC (for demo purposes - in production use real price feeds)
@@ -84,19 +113,28 @@ const TOKEN_CONVERSION_RATES: { [key: string]: number } = {
   'usdt': 1,
   'eth': 4000, // 1 ETH = 4000 USDC
   'ethereum': 4000,
+  'pyusd': 1 // Assuming 1 PYUSD = 1 USDC for now
+};
+
+// PYUSD Contract Addresses (Mainnet)
+const PYUSD_CONTRACT_ADDRESSES: { [key: number]: `0x${string}` } = {
+  11155111: "0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9", // Sepolia Testnet
 };
 
 const Groups = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { address } = useAccount();
+  const { address, chain } = useAccount();
   // Removed useTransactionPopup since we're not using Blockscout SDK anymore
   const { nexusSDK, isInitialized } = useNexus();
+  
+  // Wagmi hook for direct PYUSD payments
+  const { writeContractAsync } = useWriteContract();
   
   const [groups, setGroups] = useState<Group[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null);
-  const [paymentStatus, setPaymentStatus] = useState<{ [key: string]: 'success' | 'error' | 'processing' }>({});
+  const [paymentStatus, setPaymentStatus] = useState<{ [key: string]: 'success' | 'error' | 'processing' | 'failed' }>({});
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
   const [databasePayments, setDatabasePayments] = useState<any[]>([]);
@@ -241,13 +279,22 @@ const Groups = () => {
     return CHAIN_MAPPING[normalizedChain] || 11155420; // Default to Optimism Sepolia
   };
 
-  const getTokenType = (tokenName: string): 'USDC' | 'USDT' | 'ETH' => {
+  const getTokenType = (tokenName: string): 'USDC' | 'USDT' | 'ETH' | 'PYUSD' => {
     const normalizedToken = tokenName.toLowerCase().trim();
     return TOKEN_MAPPING[normalizedToken] || 'USDC'; // Default to USDC
   };
 
   const getChainName = (chainId: number): string => {
     return CHAIN_ID_TO_NAME[chainId] || 'optimism-sepolia'; // Default to optimism-sepolia
+  };
+
+  // Helper function to get Nexus SDK compatible token type
+  const getNexusSupportedTokenType = (tokenName: string): 'USDC' | 'USDT' | 'ETH' => {
+    const normalizedToken = tokenName.toLowerCase().trim();
+    if (normalizedToken === 'pyusd') {
+      return 'USDC'; // Always return USDC for PYUSD when interacting with Nexus SDK
+    }
+    return (TOKEN_MAPPING[normalizedToken] || 'USDC') as 'USDC' | 'USDT' | 'ETH';
   };
 
   const validateEmployeeData = (employee: any) => {
@@ -265,155 +312,267 @@ const Groups = () => {
   };
 
   const handlePayEmployee = async (group: Group, employee: any) => {
-    if (!nexusSDK || !isInitialized) {
-      toast({
-        title: "Nexus SDK Not Ready",
-        description: "Please wait for Nexus SDK to initialize.",
-        variant: "destructive",
-      });
-      return { success: false, error: "Nexus SDK not ready" };
-    }
-
     const paymentKey = `${group.id}-${employee.id}`;
     setIsProcessingPayment(paymentKey);
     setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'processing' }));
 
-    try {
-      // Validate employee data before processing
-      validateEmployeeData(employee);
+    const tokenType = getTokenType(employee.token);
 
-      // Use actual employee data from database with proper chain mapping
-      const destinationChainId = getChainId(employee.chain);
-      const tokenType = getTokenType(employee.token);
-
-      const transferParams = {
-        token: tokenType,
-        amount: parseFloat(employee.payment_amount || '0').toString(),
-        chainId: destinationChainId as any,
-        recipient: employee.wallet_address as `0x${string}`,
-        sourceChains: [11155111] as number[]
-      };
-
-      console.log('Transfer Parameters:', transferParams);
-      console.log('Employee Data:', employee);
-
-      // Execute the transfer
-      console.log('Executing transfer...');
-      const transferResult = await nexusSDK.transfer(transferParams);
-
-      console.log('Transfer Result:', transferResult);
-
-      if (transferResult.success) {
-        setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'success' }));
-        
-        // Save payment to database
-        try {
-          console.log('Saving payment with employment_id:', employee.employment_id);
-          console.log('Employee data:', employee);
-          console.log('Group employer ID:', group.employer?.id);
-          
-          // If employment_id is missing, try to find it from the database
-          let employmentId = employee.employment_id;
-          if (!employmentId && group.employer?.id) {
-            console.warn('employment_id is missing, attempting to find it from database...');
-            try {
-              const employmentResult = await ProfileService.findEmploymentId(group.employer.id, employee.id);
-              if (employmentResult.success && employmentResult.data) {
-                employmentId = employmentResult.data;
-                console.log('Found employment_id:', employmentId);
-              } else {
-                console.error('Could not find employment_id:', employmentResult.error);
-              }
-            } catch (error) {
-              console.error('Error finding employment_id:', error);
-            }
-          }
-          
-          const paymentResult = await ProfileService.savePayment({
-            employment_id: employmentId || null, // Allow null for now
-            employer_id: group.employer?.id,
-            employee_id: employee.id,
-            chain: employee.chain,
-            token: employee.token,
-            token_contract: employee.token_contract,
-            token_decimals: employee.token_decimals,
-            amount_token: employee.payment_amount || '0',
-            recipient: employee.wallet_address,
-            tx_hash: transferResult.transactionHash,
-            status: 'confirmed'
-          });
-
-          if (paymentResult.success) {
-            console.log('Payment saved to database:', paymentResult.data);
-          } else {
-            console.error('Failed to save payment to database:', paymentResult.error);
-          }
-        } catch (dbError) {
-          console.error('Error saving payment to database:', dbError);
-        }
-        
+    if (tokenType === 'PYUSD') {
+      // Direct PYUSD payment
+      if (!address) {
         toast({
-          title: "🎉 Payment Successful!",
-          description: `Sent ${parseFloat(employee.payment_amount || '0').toFixed(2)} ${tokenType} to ${employee.first_name} ${employee.last_name}`,
+          title: "Wallet Not Connected",
+          description: "Please connect your wallet to make PYUSD payments.",
+          variant: "destructive",
+        });
+        return { success: false, error: "Wallet not connected" };
+      }
+
+      const pyusdContractAddress = PYUSD_CONTRACT_ADDRESSES[getChainId(employee.chain)];
+
+      if (!pyusdContractAddress) {
+        toast({
+          title: "PYUSD Not Supported on Chain",
+          description: `PYUSD is not supported on ${employee.chain} for direct payments.`, 
+          variant: "destructive",
+        });
+        return { success: false, error: "PYUSD not supported on chain" };
+      }
+
+      try {
+        console.log(`Initiating direct PYUSD payment to ${employee.wallet_address} for ${employee.payment_amount} PYUSD on chain ${employee.chain}`);
+        const amountInWei = parseUnits(parseFloat(employee.payment_amount).toFixed(6), 6); // PYUSD typically has 6 decimals
+
+        const pyusdTxResult = await writeContractAsync({
+          address: pyusdContractAddress as `0x${string}`,
+          abi: erc20ABI,
+          functionName: 'transfer',
+          args: [employee.wallet_address as `0x${string}`, amountInWei],
+          account: address, // Explicitly pass the connected account
+          chainId: getChainId(employee.chain) as number // Specify the chain ID and assert type
         });
 
-        // Show transaction in Blockscout if available
-        if (transferResult.transactionHash) {
-          console.log(`Transaction successful: ${transferResult.transactionHash} on chain ${destinationChainId}`);
-          
-          // Wait 5 seconds for transaction to be indexed by explorer
-          setTimeout(async () => {
-            try {
-              // Use Supabase function to avoid CORS issues
-              const chainName = getChainName(destinationChainId);
-              const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=${chainName}&hash=${transferResult.transactionHash}&api=v2`);
-              if (response.ok) {
-                const txData = await response.json();
-                console.log('Transaction data from Blockscout:', txData);
-                // You can show this data in a toast or modal if needed
+        if (pyusdTxResult) {
+          console.log('PYUSD Direct Transfer Result:', pyusdTxResult);
+          setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'success' }));
+
+          // Save payment to database for PYUSD
+          try {
+            console.log('Saving PYUSD payment with employment_id:', employee.employment_id);
+            console.log('Employee data:', employee);
+            console.log('Group employer ID:', group.employer?.id);
+
+            let employmentId = employee.employment_id;
+            if (!employmentId && group.employer?.id) {
+              console.warn('employment_id is missing, attempting to find it from database...');
+              try {
+                const employmentResult = await ProfileService.findEmploymentId(group.employer.id, employee.id);
+                if (employmentResult.success && employmentResult.data) {
+                  employmentId = employmentResult.data;
+                  console.log('Found employment_id:', employmentId);
+                } else {
+                  console.error('Could not find employment_id:', employmentResult.error);
+                }
+              } catch (error) {
+                console.error('Error finding employment_id:', error);
               }
-          } catch (txError) {
-              console.log('Transaction lookup not available:', txError);
-              // This is not a critical error, just a nice-to-have feature
+            }
+
+            const paymentResult = await ProfileService.savePayment({
+              employment_id: employmentId || null,
+              employer_id: group.employer?.id,
+              employee_id: employee.id,
+              chain: employee.chain,
+              token: tokenType,
+              token_contract: pyusdContractAddress,
+              token_decimals: 6, // PYUSD typically has 6 decimals
+              amount_token: employee.payment_amount || '0',
+              recipient: employee.wallet_address,
+              tx_hash: pyusdTxResult,
+              status: 'confirmed'
+            });
+
+            if (paymentResult.success) {
+              console.log('PYUSD Payment saved to database:', paymentResult.data);
+            } else {
+              console.error('Failed to save PYUSD payment to database:', paymentResult.error);
+            }
+          } catch (dbError) {
+            console.error('Error saving PYUSD payment to database:', dbError);
           }
-          }, 5000); // Wait 5 seconds
+          
+          toast({
+            title: "Payment Successful",
+            description: `Successfully sent ${employee.payment_amount} PYUSD to ${employee.name}. Transaction: ${pyusdTxResult}`,
+            variant: "default",
+          });
+          return { success: true, txHash: pyusdTxResult };
+        } else {
+          throw new Error("PYUSD direct transfer failed.");
         }
 
-        // Refresh transaction history after successful payment
-        setTimeout(() => {
-          fetchRecentTransactions();
-        }, 6000); // Wait a bit longer than the transaction lookup
+      } catch (error) {
+        console.error("Error sending direct PYUSD payment:", error);
+        setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'failed' }));
+        toast({
+          title: "Payment Failed",
+          description: `Failed to send PYUSD to ${employee.name}. Error: ${error instanceof Error ? error.message : String(error)}`, 
+          variant: "destructive",
+        });
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      } finally {
+        setIsProcessingPayment(null);
+      }
 
-        return { success: true, transactionHash: transferResult.transactionHash };
+    } else {
+      // Existing Nexus SDK payment logic
+      if (!nexusSDK || !isInitialized) {
+        toast({
+          title: "Nexus SDK Not Ready",
+          description: "Please wait for Nexus SDK to initialize.",
+          variant: "destructive",
+        });
+        return { success: false, error: "Nexus SDK not ready" };
+      }
 
-      } else {
-        console.error('Transfer failed:', transferResult);
+      try {
+        // Validate employee data before processing
+        validateEmployeeData(employee);
+
+        // Use actual employee data from database with proper chain mapping
+        const destinationChainId = getChainId(employee.chain);
+        const nexusSupportedTokenType = getNexusSupportedTokenType(tokenType);
+
+        const transferParams = {
+          token: nexusSupportedTokenType,
+          amount: parseFloat(employee.payment_amount || '0').toString(),
+          chainId: destinationChainId as any,
+          recipient: employee.wallet_address as `0x${string}`,
+          sourceChains: [11155111] as number[]
+        };
+
+        console.log('Transfer Parameters:', transferParams);
+        console.log('Employee Data:', employee);
+
+        // Execute the transfer
+        console.log('Executing transfer...');
+        const transferResult = await nexusSDK.transfer(transferParams);
+
+        console.log('Transfer Result:', transferResult);
+
+        if (transferResult.success) {
+          setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'success' }));
+          
+          // Save payment to database
+          try {
+            console.log('Saving payment with employment_id:', employee.employment_id);
+            console.log('Employee data:', employee);
+            console.log('Group employer ID:', group.employer?.id);
+            
+            // If employment_id is missing, try to find it from the database
+            let employmentId = employee.employment_id;
+            if (!employmentId && group.employer?.id) {
+              console.warn('employment_id is missing, attempting to find it from database...');
+              try {
+                const employmentResult = await ProfileService.findEmploymentId(group.employer.id, employee.id);
+                if (employmentResult.success && employmentResult.data) {
+                  employmentId = employmentResult.data;
+                  console.log('Found employment_id:', employmentId);
+                } else {
+                  console.error('Could not find employment_id:', employmentResult.error);
+                }
+              } catch (error) {
+                console.error('Error finding employment_id:', error);
+              }
+            }
+            
+            const paymentResult = await ProfileService.savePayment({
+              employment_id: employmentId || null, // Allow null for now
+              employer_id: group.employer?.id,
+              employee_id: employee.id,
+              chain: employee.chain,
+              token: employee.token,
+              token_contract: employee.token_contract,
+              token_decimals: employee.token_decimals,
+              amount_token: employee.payment_amount || '0',
+              recipient: employee.wallet_address,
+              tx_hash: transferResult.transactionHash,
+              status: 'confirmed'
+            });
+
+            if (paymentResult.success) {
+              console.log('Payment saved to database:', paymentResult.data);
+            } else {
+              console.error('Failed to save payment to database:', paymentResult.error);
+            }
+          } catch (dbError) {
+            console.error('Error saving payment to database:', dbError);
+          }
+          
+          toast({
+            title: "🎉 Payment Successful!",
+            description: `Sent ${parseFloat(employee.payment_amount || '0').toFixed(2)} ${tokenType} to ${employee.first_name} ${employee.last_name}`,
+          });
+
+          // Show transaction in Blockscout if available
+          if (transferResult.transactionHash) {
+            console.log(`Transaction successful: ${transferResult.transactionHash} on chain ${destinationChainId}`);
+            
+            // Wait 5 seconds for transaction to be indexed by explorer
+            setTimeout(async () => {
+              try {
+                // Use Supabase function to avoid CORS issues
+                const chainName = getChainName(destinationChainId);
+                const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=${chainName}&hash=${transferResult.transactionHash}&api=v2`);
+                if (response.ok) {
+                  const txData = await response.json();
+                  console.log('Transaction data from Blockscout:', txData);
+                  // You can show this data in a toast or modal if needed
+                }
+            } catch (txError) {
+                console.log('Transaction lookup not available:', txError);
+                // This is not a critical error, just a nice-to-have feature
+            }
+            }, 5000); // Wait 5 seconds
+          }
+
+          // Refresh transaction history after successful payment
+          setTimeout(() => {
+            fetchRecentTransactions();
+          }, 6000); // Wait a bit longer than the transaction lookup
+
+          return { success: true, transactionHash: transferResult.transactionHash };
+
+        } else {
+          console.error('Transfer failed:', transferResult);
+          setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'error' }));
+          
+          toast({
+            title: "❌ Payment Failed",
+            description: "Unknown error occurred during transfer",
+            variant: "destructive",
+          });
+
+          return { success: false, error: "Transfer failed" };
+        }
+
+      } catch (error) {
+        console.error('Error processing payment:', error);
         setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'error' }));
         
+        const errorMessage = error instanceof Error ? error.message : "Failed to process payment";
+        
         toast({
-          title: "❌ Payment Failed",
-          description: "Unknown error occurred during transfer",
+          title: "💸 Payment Error",
+          description: errorMessage,
           variant: "destructive",
         });
 
-        return { success: false, error: "Transfer failed" };
+        return { success: false, error: errorMessage };
+      } finally {
+        setIsProcessingPayment(null);
       }
-
-    } catch (error) {
-      console.error('Error processing payment:', error);
-      setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'error' }));
-      
-      const errorMessage = error instanceof Error ? error.message : "Failed to process payment";
-      
-      toast({
-        title: "💸 Payment Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-
-      return { success: false, error: errorMessage };
-    } finally {
-      setIsProcessingPayment(null);
     }
   };
 
