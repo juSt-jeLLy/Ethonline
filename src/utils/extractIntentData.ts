@@ -49,8 +49,6 @@ const parseAvaiIntentData = (html: string) => {
     
     let solver = '';
     
-    console.log('=== PARSING AVAIL EXPLORER HTML ===');
-    
     // Strategy 1: Look for the specific "Solver" section in destinations
     const solverSections = doc.querySelectorAll('div, section, .flex, .flex-col');
     
@@ -59,15 +57,12 @@ const parseAvaiIntentData = (html: string) => {
       
       // Look for sections that contain "Solver" text
       if (sectionText.includes('Solver') && !sectionText.includes('Sources')) {
-        console.log('Found Solver section:', sectionText.substring(0, 200));
-        
         // Look for address links within this section
         const addressLinks = section.querySelectorAll('a[href*="address"]');
         for (const link of addressLinks) {
           const address = link.textContent?.trim();
           if (address?.match(/^0x[a-fA-F0-9]{40}$/) || address?.match(/0x[a-fA-F0-9]+/)) {
             solver = address.match(/0x[a-fA-F0-9]{40}/)?.[0] || address;
-            console.log('✅ Found solver address in Solver section:', solver);
             return { solver };
           }
         }
@@ -76,7 +71,6 @@ const parseAvaiIntentData = (html: string) => {
         const addressMatch = sectionText.match(/0x[a-fA-F0-9]{40}/);
         if (addressMatch) {
           solver = addressMatch[0];
-          console.log('✅ Found solver address in Solver section text:', solver);
           return { solver };
         }
       }
@@ -87,8 +81,6 @@ const parseAvaiIntentData = (html: string) => {
     
     for (const heading of allHeadings) {
       if (heading.textContent?.trim() === 'Solver') {
-        console.log('Found Solver heading');
-        
         // Look in the same container or nearby elements
         const container = heading.closest('div, section');
         if (container) {
@@ -97,7 +89,6 @@ const parseAvaiIntentData = (html: string) => {
             const address = link.textContent?.trim();
             if (address?.match(/0x[a-fA-F0-9]+/)) {
               solver = address.match(/0x[a-fA-F0-9]{40}/)?.[0] || address;
-              console.log('✅ Found solver address near Solver heading:', solver);
               return { solver };
             }
           }
@@ -107,7 +98,6 @@ const parseAvaiIntentData = (html: string) => {
           const addressMatch = containerText.match(/0x[a-fA-F0-9]{40}/);
           if (addressMatch) {
             solver = addressMatch[0];
-            console.log('✅ Found solver address in container text:', solver);
             return { solver };
           }
         }
@@ -120,13 +110,10 @@ const parseAvaiIntentData = (html: string) => {
     for (const card of destinationCards) {
       const cardText = card.textContent || '';
       if (cardText.includes('DESTINATIONS') && cardText.includes('Solver')) {
-        console.log('Found DESTINATIONS card with Solver');
-        
         // Extract address from the card
         const addressMatch = cardText.match(/0x[a-fA-F0-9]{40}/);
         if (addressMatch) {
           solver = addressMatch[0];
-          console.log('✅ Found solver address in DESTINATIONS card:', solver);
           return { solver };
         }
         
@@ -136,7 +123,6 @@ const parseAvaiIntentData = (html: string) => {
           const address = link.textContent?.trim();
           if (address?.match(/0x[a-fA-F0-9]+/)) {
             solver = address.match(/0x[a-fA-F0-9]{40}/)?.[0] || address;
-            console.log('✅ Found solver address in DESTINATIONS card link:', solver);
             return { solver };
           }
         }
@@ -152,7 +138,6 @@ const parseAvaiIntentData = (html: string) => {
         const parentText = link.parentElement?.textContent?.toLowerCase() || '';
         if (parentText.includes('solver') || parentText.includes('executor')) {
           solver = address;
-          console.log('✅ Found solver in etherscan link by context:', solver);
           return { solver };
         }
       }
@@ -164,30 +149,21 @@ const parseAvaiIntentData = (html: string) => {
       .filter(Boolean) as string[];
     
     const uniqueAddresses = [...new Set(allAddresses)];
-    console.log('All unique addresses found:', uniqueAddresses);
     
     if (uniqueAddresses.length > 0) {
       // Try to exclude the user address (if we know it)
       // The solver is usually a different address from the user
       solver = uniqueAddresses[0]; // Take the first one as fallback
-      console.log('⚠️ Using fallback solver address:', solver);
-    }
-    
-    if (!solver) {
-      console.log('❌ No solver address found in HTML');
     }
     
     return { solver };
   } catch (error) {
-    console.error('Error parsing Avai HTML:', error);
     return { solver: '' };
   }
 };
 
 export const extractIntentData = async (intent: any, address: string) => {
   try {
-    console.log('Raw intent data from SDK:', intent);
-    
     const intentId = intent.id || intent.intentId || intent.requestId || '';
     
     if (!intentId) {
@@ -241,7 +217,6 @@ export const extractIntentData = async (intent: any, address: string) => {
           return `${whole}.${trimmedFractional}`;
         }
       } catch (error) {
-        console.error('Error formatting amount:', error);
         return '';
       }
     };
@@ -317,7 +292,6 @@ export const extractIntentData = async (intent: any, address: string) => {
     
     if (intentId) {
       try {
-        console.log('🔄 Fetching solver data from Avai explorer for intent:', intentId);
         const avaiResponse = await fetch(`https://explorer.nexus.availproject.org/intent/${intentId}`);
         if (avaiResponse.ok) {
           const html = await avaiResponse.text();
@@ -326,19 +300,15 @@ export const extractIntentData = async (intent: any, address: string) => {
           if (avaiData.solver) {
             solver = avaiData.solver;
             solverSource = 'avai';
-            console.log('✅ Successfully extracted solver from Avai explorer:', solver);
           } else {
-            console.log('❌ No solver found in Avai explorer HTML, using hardcoded solver');
             solver = HARDCODED_SOLVER;
             solverSource = 'hardcoded';
           }
         } else {
-          console.log('Avai explorer response not OK, using hardcoded solver');
           solver = HARDCODED_SOLVER;
           solverSource = 'hardcoded';
         }
       } catch (avaiError) {
-        console.log('Could not fetch from Avai explorer, using hardcoded solver:', avaiError);
         solver = HARDCODED_SOLVER;
         solverSource = 'hardcoded';
       }
@@ -363,11 +333,9 @@ export const extractIntentData = async (intent: any, address: string) => {
       }
     };
     
-    console.log('Processed intent data:', processedData);
     return processedData;
     
   } catch (error) {
-    console.error('Error extracting intent data:', error);
     return {
       intentId: '', sourceAmount: '', sourceCurrency: '', destAmount: '', destCurrency: '',
       sourceChain: '', destChain: '', status: 'UNKNOWN', timestamp: Date.now() / 1000,
