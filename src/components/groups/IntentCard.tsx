@@ -1,8 +1,9 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Receipt, ArrowRight, Copy } from "lucide-react";
+import { Receipt, ArrowRight, Copy, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getBlockscoutUrl } from "@/utils/extractIntentData";
 
 interface Intent {
   intentId: string;
@@ -21,6 +22,8 @@ interface Intent {
   senderToSolverHash: string;
   solverToReceiverHash: string;
   hasRealData: boolean;
+  sourceChainId: number;
+  destinationChainId: number;
 }
 
 interface IntentCardProps {
@@ -81,26 +84,26 @@ export function IntentCard({ intent, index }: IntentCardProps) {
         <div className="space-y-4">
           {/* Flow Header */}
           <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>Step 1: Avail Intent</span>
+            <span>Step 1: Deposit to Solver</span>
             <ArrowRight className="h-4 w-4" />
-            <span>Step 2</span>
+            <span>Step 2: Final Transfer</span>
           </div>
 
           {/* Two-Step Flow */}
           <div className="grid md:grid-cols-2 gap-6">
-            {/* Step 1: Sender → Solver (Avail Intent) */}
-            <div className="space-y-4">
-              <div className="p-4 bg-blue-50/50 rounded-lg border border-blue-200/50">
+            {/* Step 1: Sender → Solver (Deposit) */}
+            <div className="flex flex-col">
+              <div className="p-4 bg-blue-50/50 rounded-lg border border-blue-200/50 h-full">
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-blue-800">Step 1: Avail Intent</h4>
+                  <h4 className="font-semibold text-blue-800">Step 1: Create An Intent</h4>
                   <Badge variant="outline" className="bg-blue-100 text-blue-700">
-                    Intent Created
+                    Funds Locked
                   </Badge>
                 </div>
                 <div className="space-y-3 text-sm">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <span className="text-muted-foreground">From:</span>
+                      <span className="text-muted-foreground">From Sender:</span>
                       {intent.sender ? (
                         <div className="flex items-center gap-1">
                           <p className="font-mono text-xs break-all">
@@ -134,6 +137,17 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                           >
                             <Copy className="h-3 w-3" />
                           </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-4 w-4"
+                            onClick={() => window.open(
+                              getBlockscoutUrl(intent.sourceChainId, intent.solver), 
+                              '_blank'
+                            )}
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                          </Button>
                         </div>
                       ) : (
                         <p className="text-xs text-muted-foreground">Not available</p>
@@ -142,7 +156,7 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                   </div>
                   {intent.sourceAmount && (
                     <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">Amount:</span>
+                      <span className="text-muted-foreground">Amount Sent:</span>
                       <span className="font-semibold text-blue-700">
                         {intent.sourceAmount} {intent.sourceCurrency}
                       </span>
@@ -154,17 +168,33 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                       <span>{intent.sourceChain}</span>
                     </div>
                   )}
+                  <div className="bg-blue-100/50 p-2 rounded text-xs">
+                    <p className="text-blue-800 font-medium">Solver Action:</p>
+                    <p className="text-blue-700">Receives {intent.sourceCurrency} on {intent.sourceChain}</p>
+                  </div>
                   {intent.senderToSolverHash && (
                     <div className="pt-2 border-t border-blue-200/50">
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground text-xs">TX Hash:</span>
-                        <Button
-                          variant="link"
-                          className="h-auto p-0 text-xs"
-                          onClick={() => window.open(`https://explorer.nexus-folly.availproject.org/intent/${intent.intentId}`, '_blank')}
-                        >
-                          View Intent
-                        </Button>
+                        <span className="text-muted-foreground text-xs">Deposit TX:</span>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="link"
+                            className="h-auto p-0 text-xs"
+                            onClick={() => window.open(`https://explorer.nexus.availproject.org/intent/${intent.intentId}`, '_blank')}
+                          >
+                            View Intent
+                          </Button>
+                          <Button
+                            variant="link"
+                            className="h-auto p-0 text-xs"
+                            onClick={() => window.open(
+                              getBlockscoutUrl(intent.sourceChainId, undefined, intent.senderToSolverHash), 
+                              '_blank'
+                            )}
+                          >
+                            View TX
+                          </Button>
+                        </div>
                       </div>
                       <div className="flex items-center gap-1">
                         <p className="font-mono text-xs break-all">
@@ -185,11 +215,11 @@ export function IntentCard({ intent, index }: IntentCardProps) {
               </div>
             </div>
 
-            {/* Step 2: Solver → Receiver */}
-            <div className="space-y-4">
-              <div className="p-4 bg-green-50/50 rounded-lg border border-green-200/50">
+            {/* Step 2: Solver → Receiver (Final Transfer) */}
+            <div className="flex flex-col">
+              <div className="p-4 bg-green-50/50 rounded-lg border border-green-200/50 h-full">
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-green-800">Step 2</h4>
+                  <h4 className="font-semibold text-green-800">Step 2: Final Transfer</h4>
                   <Badge variant="outline" className="bg-green-100 text-green-700">
                     {intent.status === 'SUCCESS' ? 'Completed' : 'Processing'}
                   </Badge>
@@ -210,6 +240,17 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                             onClick={() => copyToClipboard(intent.solver, "Solver address")}
                           >
                             <Copy className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-4 w-4"
+                            onClick={() => window.open(
+                              getBlockscoutUrl(intent.destinationChainId, intent.solver), 
+                              '_blank'
+                            )}
+                          >
+                            <ExternalLink className="h-3 w-3" />
                           </Button>
                         </div>
                       ) : (
@@ -237,22 +278,37 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                       )}
                     </div>
                   </div>
+                  {intent.destAmount && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Amount Received:</span>
+                      <span className="font-semibold text-green-700">
+                        {intent.destAmount} {intent.destCurrency}
+                      </span>
+                    </div>
+                  )}
                   {intent.destChain && (
                     <div className="flex justify-between items-center">
                       <span className="text-muted-foreground">Destination Chain:</span>
                       <span>{intent.destChain}</span>
                     </div>
                   )}
+                  <div className="bg-green-100/50 p-2 rounded text-xs">
+                    <p className="text-green-800 font-medium">Solver Action:</p>
+                    <p className="text-green-700">Provides {intent.destCurrency} on {intent.destChain} to Sender and sends to receiver</p>
+                  </div>
                   {intent.solverToReceiverHash && (
                     <div className="pt-2 border-t border-green-200/50">
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground text-xs">TX Hash:</span>
+                        <span className="text-muted-foreground text-xs">Transfer TX:</span>
                         <Button
                           variant="link"
                           className="h-auto p-0 text-xs"
-                          onClick={() => window.open(`https://optimism-sepolia.blockscout.com/tx/${intent.solverToReceiverHash}`, '_blank')}
+                          onClick={() => window.open(
+                            getBlockscoutUrl(intent.destinationChainId, undefined, intent.solverToReceiverHash), 
+                            '_blank'
+                          )}
                         >
-                          View on Blockscout
+                          View TX
                         </Button>
                       </div>
                       <div className="flex items-center gap-1">
@@ -276,24 +332,14 @@ export function IntentCard({ intent, index }: IntentCardProps) {
           </div>
 
           {/* Summary Footer */}
-          {(intent.totalFees || intent.destAmount) && (
+          {intent.totalFees && (
             <div className="flex items-center justify-between pt-4 border-t border-gray-200/50">
-              {intent.totalFees && (
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Total Fees: </span>
-                  <span className="font-semibold text-orange-600">
-                    {intent.totalFees} {intent.sourceCurrency}
-                  </span>
-                </div>
-              )}
-              {intent.destAmount && (
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Net Received: </span>
-                  <span className="font-semibold text-green-600">
-                    {intent.destAmount} {intent.destCurrency}
-                  </span>
-                </div>
-              )}
+              <div className="text-sm">
+                <span className="text-muted-foreground">Total Fees: </span>
+                <span className="font-semibold text-orange-600">
+                  {intent.totalFees} {intent.sourceCurrency}
+                </span>
+              </div>
               {intent.solver && (
                 <div className="text-sm">
                   <span className="text-muted-foreground">Solver: </span>

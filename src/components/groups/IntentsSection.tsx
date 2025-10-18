@@ -19,6 +19,8 @@ interface Intent {
   senderToSolverHash: string;
   solverToReceiverHash: string;
   hasRealData: boolean;
+  sourceChainId: number; // Add this
+  destinationChainId: number; 
 }
 
 interface IntentsSectionProps {
