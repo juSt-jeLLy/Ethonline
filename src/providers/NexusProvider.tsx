@@ -15,6 +15,8 @@ import {
 } from "react";
 import { useAccount, useSwitchChain } from "wagmi";
 
+const appNetwork = import.meta.env.VITE_APP_NETWORK || "mainnet"; // Default to mainnet
+
 interface NexusContextType {
   nexusSDK: NexusSDK | null;
   intentRefCallback: React.RefObject<OnIntentHookData | null>;
@@ -36,7 +38,7 @@ const NexusProvider = ({ children }: { children: React.ReactNode }) => {
   const sdk = useMemo(
     () =>
       new NexusSDK({
-        network: "testnet",
+        network: appNetwork as "mainnet" | "testnet",
         debug: true,
       }),
     [],
@@ -69,11 +71,15 @@ const NexusProvider = ({ children }: { children: React.ReactNode }) => {
       return;
     }
 
-    // Check if we're on a testnet chain
-    const testnetChainIds = [11155111, 84532, 421614, 11155420, 80002];
-    if (chain && !testnetChainIds.includes(chain.id)) {
-      setError(`Please switch to a testnet network (Sepolia, Base Sepolia, etc.)`);
-      console.warn(`Current chain ${chain.id} is not a testnet. Please switch.`);
+    // Determine chain IDs and network name based on appNetwork
+    const networkName = appNetwork === "testnet" ? "TESTNET" : "MAINNET";
+    const chainIds = appNetwork === "testnet"
+      ? [11155111, 84532, 421614, 11155420, 80002] // Sepolia, Base Sepolia, Arbitrum Sepolia, Optimism Sepolia, Polygon Amoy
+      : [1, 8453, 42161, 10, 137]; // Ethereum Mainnet, Base, Arbitrum, Optimism, Polygon
+
+    if (chain && !chainIds.includes(chain.id)) {
+      setError(`Please switch to a ${networkName.toLowerCase()} network (Ethereum, Base, etc. for mainnet / Sepolia, Base Sepolia, etc. for testnet)`);
+      console.warn(`Current chain ${chain.id} is not a ${networkName.toLowerCase()}. Please switch.`);
       return;
     }
 
@@ -81,11 +87,11 @@ const NexusProvider = ({ children }: { children: React.ReactNode }) => {
     setError(null);
 
     try {
-      console.log("Initializing Nexus SDK on TESTNET...");
+      console.log(`Initializing Nexus SDK on ${networkName}...`);
       await initializeNexus();
       attachEventHooks();
       setIsInitialized(true);
-      console.log("Nexus SDK initialized successfully on TESTNET");
+      console.log(`Nexus SDK initialized successfully on ${networkName}`);
     } catch (error) {
       console.error("Failed to initialize Nexus:", error);
       setError(error instanceof Error ? error.message : "Failed to initialize Nexus");
@@ -95,16 +101,19 @@ const NexusProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [sdk, connector, address, chain, attachEventHooks, initializeNexus]);
 
-  // Auto-initialize when wallet connects to testnet
+  // Auto-initialize when wallet connects
   useEffect(() => {
     if (isConnected && connector && address && !isInitialized && !isLoading) {
-      const testnetChainIds = [11155111, 84532, 421614, 11155420, 80002];
+      const networkName = appNetwork === "testnet" ? "testnet" : "mainnet";
+      const chainIds = appNetwork === "testnet"
+        ? [11155111, 84532, 421614, 11155420, 80002] // Sepolia, Base Sepolia, Arbitrum Sepolia, Optimism Sepolia, Polygon Amoy
+        : [1, 8453, 42161, 10, 137]; // Ethereum Mainnet, Base, Arbitrum, Optimism, Polygon
       
-      if (chain && testnetChainIds.includes(chain.id)) {
-        console.log("Wallet connected to testnet, initializing Nexus...");
+      if (chain && chainIds.includes(chain.id)) {
+        console.log(`Wallet connected to ${networkName}, initializing Nexus...`);
         handleInit();
       } else {
-        setError("Please connect to a testnet network");
+        setError(`Please connect to a ${networkName} network`);
       }
     }
   }, [isConnected, connector, address, chain, isInitialized, isLoading, handleInit]);

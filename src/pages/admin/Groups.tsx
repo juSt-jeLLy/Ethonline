@@ -13,6 +13,8 @@ import { useNexus } from '@/providers/NexusProvider';
 import { useAccount, useWriteContract } from 'wagmi';
 import { parseEther, parseUnits } from 'viem';
 
+const appNetwork = import.meta.env.VITE_APP_NETWORK || "mainnet"; // Default to mainnet
+
 // Minimal ERC-20 ABI for the transfer function
 const erc20ABI = [
   {
@@ -72,13 +74,12 @@ interface Group {
 }
 
 // Chain mapping from database names to Nexus SDK chain IDs
-const CHAIN_MAPPING: { [key: string]: number } = {
+const CHAIN_MAPPING: { [key: string]: number } = appNetwork === "testnet" ? {
   'optimism': 11155420, // Optimism Sepolia
   'ethereum': 11155111, // Sepolia
   'polygon': 80002,     // Polygon Amoy
   'arbitrum': 421614,   // Arbitrum Sepolia
   'base': 84532,        // Base Sepolia
-  'monad': 1014,        // Monad Testnet
   // Add aliases for different naming conventions
   'optimism-sepolia': 11155420,
   'op-sepolia': 11155420,
@@ -86,17 +87,34 @@ const CHAIN_MAPPING: { [key: string]: number } = {
   'polygon-amoy': 80002,
   'arbitrum-sepolia': 421614,
   'base-sepolia': 84532,
-  'monad-testnet': 1014
+} : {
+  'optimism': 10, // Optimism Mainnet
+  'ethereum': 1, // Ethereum Mainnet
+  'polygon': 137,     // Polygon Mainnet
+  'arbitrum': 42161,   // Arbitrum Mainnet
+  'base': 8453,        // Base Mainnet
+  // Add aliases for different naming conventions
+  'optimism-mainnet': 10,
+  'op-mainnet': 10,
+  'mainnet': 1,
+  'polygon-mainnet': 137,
+  'arbitrum-mainnet': 42161,
+  'base-mainnet': 8453,
 };
 
 // Reverse mapping from chain ID to chain name for Supabase function
-const CHAIN_ID_TO_NAME: { [key: number]: string } = {
+const CHAIN_ID_TO_NAME: { [key: number]: string } = appNetwork === "testnet" ? {
   11155420: 'optimism-sepolia',
   11155111: '11155111', // Use chain ID directly since sepolia isn't in your function
   80002: 'polygon-amoy',
   421614: 'arbitrum-sepolia',
   84532: 'base-sepolia'
-  //: 'optimism-sepolia' // Fallback to optimism-sepolia for unsupported chains
+} : {
+  10: 'optimism-mainnet',
+  1: 'ethereum-mainnet',
+  137: 'polygon-mainnet',
+  42161: 'arbitrum-mainnet',
+  8453: 'base-mainnet'
 };
 
 const TOKEN_MAPPING: { [key: string]: 'USDC' | 'USDT' | 'ETH' | 'PYUSD' } = {
@@ -116,9 +134,13 @@ const TOKEN_CONVERSION_RATES: { [key: string]: number } = {
   'pyusd': 1 // Assuming 1 PYUSD = 1 USDC for now
 };
 
-// PYUSD Contract Addresses (Mainnet)
-const PYUSD_CONTRACT_ADDRESSES: { [key: number]: `0x${string}` } = {
+// PYUSD Contract Addresses
+const PYUSD_CONTRACT_ADDRESSES: { [key: number]: `0x${string}` } = appNetwork === "testnet" ? {
   11155111: "0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9", // Sepolia Testnet
+} : {
+  1: "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8", // Ethereum Mainnet
+  42161: "0x46850aD61C2B7d64d08c9C754F45254596696984", // Arbitrum Mainnet
+  // Solana address is not an EVM address and cannot be used with wagmi/viem for direct payments.
 };
 
 const Groups = () => {
@@ -276,7 +298,7 @@ const Groups = () => {
 
   const getChainId = (chainName: string): number => {
     const normalizedChain = chainName.toLowerCase().trim();
-    return CHAIN_MAPPING[normalizedChain] || 11155420; // Default to Optimism Sepolia
+    return CHAIN_MAPPING[normalizedChain] || (appNetwork === "testnet" ? 11155420 : 10); // Default to Optimism Sepolia or Mainnet
   };
 
   const getTokenType = (tokenName: string): 'USDC' | 'USDT' | 'ETH' | 'PYUSD' => {
@@ -285,7 +307,8 @@ const Groups = () => {
   };
 
   const getChainName = (chainId: number): string => {
-    return CHAIN_ID_TO_NAME[chainId] || 'optimism-sepolia'; // Default to optimism-sepolia
+    const defaultChainName = appNetwork === "testnet" ? 'optimism-sepolia' : 'optimism-mainnet';
+    return CHAIN_ID_TO_NAME[chainId] || defaultChainName; // Default based on appNetwork
   };
 
   // Helper function to get Nexus SDK compatible token type
@@ -350,7 +373,7 @@ const Groups = () => {
           functionName: 'transfer',
           args: [employee.wallet_address as `0x${string}`, amountInWei],
           account: address, // Explicitly pass the connected account
-          chainId: getChainId(employee.chain) as number // Specify the chain ID and assert type
+          chain: chain // Pass the chain object from useAccount
         });
 
         if (pyusdTxResult) {
@@ -449,7 +472,7 @@ const Groups = () => {
           amount: parseFloat(employee.payment_amount || '0').toString(),
           chainId: destinationChainId as any,
           recipient: employee.wallet_address as `0x${string}`,
-          sourceChains: [11155111] as number[]
+          sourceChains: (appNetwork === "testnet" ? [11155111] : [1]) as number[] // Set source chain based on appNetwork
         };
 
         console.log('Transfer Parameters:', transferParams);
@@ -524,7 +547,7 @@ const Groups = () => {
               try {
                 // Use Supabase function to avoid CORS issues
                 const chainName = getChainName(destinationChainId);
-                const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=${chainName}&hash=${transferResult.transactionHash}&api=v2`);
+                const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=${appNetwork === "testnet" ? "optimism-sepolia" : "optimism-mainnet"}&hash=${transferResult.transactionHash}&api=v2`);
                 if (response.ok) {
                   const txData = await response.json();
                   console.log('Transaction data from Blockscout:', txData);
@@ -873,7 +896,7 @@ const Groups = () => {
     setIsLoadingTransactions(true);
     try {
       // Use Supabase function to fetch recent transactions for the current user
-      const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=optimism-sepolia&address=${address}&api=v2`);
+      const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=${appNetwork === "testnet" ? "optimism-sepolia" : "optimism-mainnet"}&address=${address}&api=v2`);
       if (response.ok) {
         const txData = await response.json();
         console.log('Transaction history:', txData);

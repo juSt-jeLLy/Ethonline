@@ -7,6 +7,8 @@ import type {
 import { useRef, useState } from "react";
 import { useAccount } from "wagmi";
 
+const appNetwork = import.meta.env.VITE_APP_NETWORK || "testnet"; // Default to mainnet
+
 const useInitNexus = (sdk: NexusSDK) => {
   const { connector } = useAccount();
   const [nexusSDK, setNexusSDK] = useState<NexusSDK | null>(null);
@@ -38,7 +40,8 @@ const useInitNexus = (sdk: NexusSDK) => {
         throw new Error("No accounts found in wallet. Please ensure your wallet is unlocked.");
       }
 
-      console.log("Initializing Nexus SDK with provider on TESTNET...");
+      const networkName = appNetwork === "testnet" ? "TESTNET" : "MAINNET";
+      console.log(`Initializing Nexus SDK with provider on ${networkName}...`);
       await sdk.initialize(provider);
       setNexusSDK(sdk);
       
@@ -46,7 +49,7 @@ const useInitNexus = (sdk: NexusSDK) => {
       const currentNetwork = await provider.request({ method: 'net_version' });
       console.log(`Current network ID: ${currentNetwork}`);
       
-      console.log("Nexus SDK initialized successfully on TESTNET");
+      console.log(`Nexus SDK initialized successfully on ${networkName}`);
       
     } catch (error) {
       console.error("Error initializing Nexus:", error);

@@ -10,7 +10,6 @@ export class ProfileService {
           id: profileData.userId,
           name: profileData.name,
           email: profileData.email,
-          updated_at: new Date().toISOString()
         }, {
           onConflict: 'id'
         })
@@ -73,7 +72,6 @@ export class ProfileService {
         first_name: profileData.first_name,
         last_name: profileData.last_name,
         email: profileData.email || null, // Allow null emails
-        updated_at: new Date().toISOString()
       }
 
       let employeeResult
@@ -103,35 +101,36 @@ export class ProfileService {
 
       // Step 4: Handle wallet entry (create or update)
       if (profileData.wallet_address) {
-        // Check if this wallet address already exists for this employee
-        const { data: existingWallet, error: checkError } = await supabase
+        // Try to find an existing default wallet for this employee
+        const { data: existingDefaultWallet, error: checkError } = await supabase
           .from('wallets')
           .select('id, account_address, chain, token')
           .eq('employee_id', employeeId)
-          .eq('account_address', profileData.wallet_address)
+          .eq('is_default', true)
           .maybeSingle()
 
         if (checkError) {
           throw checkError
         }
 
-        if (existingWallet) {
-          // Update existing wallet with new preferences
+        if (existingDefaultWallet) {
+          // Update the existing default wallet
           const { data: walletData, error: walletError } = await supabase
             .from('wallets')
             .update({
-              chain: profileData.preferred_chain || existingWallet.chain || 'ethereum',
-              token: profileData.preferred_token || existingWallet.token || 'usdc'
+              account_address: profileData.wallet_address,
+              chain: profileData.preferred_chain || existingDefaultWallet.chain || 'ethereum',
+              token: profileData.preferred_token || existingDefaultWallet.token || 'usdc',
             })
-            .eq('id', existingWallet.id)
+            .eq('id', existingDefaultWallet.id)
             .select()
 
           if (walletError) {
             throw walletError
           }
-          console.log('Updated existing wallet for employee:', employeeId)
+          console.log('Updated existing default wallet for employee:', employeeId)
         } else {
-          // Create new wallet if this address doesn't exist for this employee
+          // No existing default wallet, so insert a new one
           const { data: walletData, error: walletError } = await supabase
             .from('wallets')
             .insert({
@@ -146,10 +145,12 @@ export class ProfileService {
           if (walletError) {
             throw walletError
           }
-          console.log('Created new wallet for employee:', employeeId)
+          console.log('Created new default wallet for employee:', employeeId)
         }
       } else {
-        // Check if employee has any default wallet to update
+        // If no wallet address is provided in profileData, ensure existing default wallet is still default
+        // Or create a new basic default wallet if none exists and the employee has no wallet linked
+
         const { data: existingDefaultWallet, error: checkError } = await supabase
           .from('wallets')
           .select('id, chain, token')
@@ -167,7 +168,7 @@ export class ProfileService {
             .from('wallets')
             .update({
               chain: profileData.preferred_chain || existingDefaultWallet.chain || 'ethereum',
-              token: profileData.preferred_token || existingDefaultWallet.token || 'usdc'
+              token: profileData.preferred_token || existingDefaultWallet.token || 'usdc',
             })
             .eq('id', existingDefaultWallet.id)
             .select()
@@ -175,9 +176,9 @@ export class ProfileService {
           if (walletError) {
             throw walletError
           }
-          console.log('Updated existing default wallet preferences for employee:', employeeId)
+          console.log('Updated existing default wallet preferences for employee (no address provided):', employeeId)
         } else {
-          // Create basic wallet entry even without address
+          // Create basic wallet entry if no default exists for this employee
           const { data: walletData, error: walletError } = await supabase
             .from('wallets')
             .insert({
@@ -192,7 +193,7 @@ export class ProfileService {
           if (walletError) {
             throw walletError
           }
-          console.log('Created basic wallet entry for employee:', employeeId)
+          console.log('Created basic default wallet entry for employee (no address provided):', employeeId)
         }
       }
 
@@ -546,7 +547,6 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
           token: employmentData.token,
           token_contract: employmentData.token_contract,
           token_decimals: employmentData.token_decimals,
-          updated_at: new Date().toISOString()
         }, {
           onConflict: 'employer_id,employee_id'
         })
@@ -1061,7 +1061,6 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
           token: employee.token || 'usdc',
           token_contract: '',
           token_decimals: 18,
-          updated_at: new Date().toISOString()
         };
 
         employmentRecords.push(employmentRecord);
@@ -1156,7 +1155,6 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
         .from('employments')
         .update({
           payment_amount: paymentAmount.toString(), // Convert to string for decimal storage
-          updated_at: new Date().toISOString()
         })
         .eq('id', employmentId)
         .select();
@@ -1268,7 +1266,6 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
         token: data.employeeData.token || 'usdc',
         token_contract: '',
         token_decimals: 18,
-        updated_at: new Date().toISOString()
       };
 
       console.log('Creating employment record:', employmentRecord);
@@ -1587,7 +1584,9 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
       // Calculate statistics
       const totalEmployees = employments.length;
       const activeGroups = 1; // Since we group by employer, each employer = 1 group
-      const monthlyPayout = employments.reduce((sum, emp) => sum + (emp.payment_amount || 0), 0);
+      const monthlyPayout = employments.reduce((sum, emp) => {
+        return sum + parseFloat(emp.payment_amount || '0');
+      }, 0);
       const pendingPayments = employments.filter(emp => emp.status === 'pending').length;
 
       // Get recent groups (just the current company info)

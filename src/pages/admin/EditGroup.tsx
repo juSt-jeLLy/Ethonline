@@ -14,6 +14,8 @@ import { ProfileService } from "@/lib/profileService";
 import { useAccount } from 'wagmi';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+const appNetwork = import.meta.env.VITE_APP_NETWORK || "mainnet"; // Default to mainnet
+
 interface Employee {
   id: string;
   first_name: string;
@@ -328,7 +330,7 @@ const EditGroup = () => {
       address: employee.wallet_address,
       name: `${employee.first_name} ${employee.last_name}`,
       payment: "0", // Default payment amount
-      chain: employee.token === 'pyusd' ? 'ethereum' : (employee.chain || "ethereum"), // Set chain to ethereum if token is pyusd
+      chain: employee.token === 'pyusd' ? (appNetwork === "testnet" ? 'ethereum' : 'ethereum') : (employee.chain || "ethereum"), // Set chain to ethereum (Sepolia/Mainnet) if token is pyusd
       token: employee.token || "usdc"
     });
     setSearchResults([]);
@@ -585,11 +587,23 @@ const EditGroup = () => {
                       <SelectValue placeholder="Select Chain" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ethereum">Sepolia</SelectItem>
-                      <SelectItem value="polygon">Amoy</SelectItem>
-                      <SelectItem value="arbitrum">Arbitrum Sepolia</SelectItem>
-                      <SelectItem value="optimism">Op Sepolia</SelectItem>
-                      <SelectItem value="base">Base Sepolia</SelectItem>
+                      {appNetwork === "testnet" ? (
+                        <>
+                          <SelectItem value="ethereum">Sepolia</SelectItem>
+                          <SelectItem value="polygon">Amoy</SelectItem>
+                          <SelectItem value="arbitrum">Arbitrum Sepolia</SelectItem>
+                          <SelectItem value="optimism">Op Sepolia</SelectItem>
+                          <SelectItem value="base">Base Sepolia</SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          <SelectItem value="ethereum">Ethereum Mainnet</SelectItem>
+                          <SelectItem value="polygon">Polygon Mainnet</SelectItem>
+                          <SelectItem value="arbitrum">Arbitrum Mainnet</SelectItem>
+                          <SelectItem value="optimism">Optimism Mainnet</SelectItem>
+                          <SelectItem value="base">Base Mainnet</SelectItem>
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
                   <Select
@@ -597,7 +611,7 @@ const EditGroup = () => {
                     onValueChange={(value) => {
                       const updatedEmployee = { ...newEmployee, token: value };
                       if (value === 'pyusd') {
-                        updatedEmployee.chain = 'ethereum'; // Set chain to Sepolia if PYUSD is selected
+                        updatedEmployee.chain = appNetwork === "testnet" ? 'ethereum' : 'ethereum'; // Set chain to Sepolia or Ethereum Mainnet
                       }
                       setNewEmployee(updatedEmployee);
                     }}
@@ -609,7 +623,7 @@ const EditGroup = () => {
                       <SelectItem value="usdc">USDC</SelectItem>
                       <SelectItem value="usdt">USDT</SelectItem>
                       <SelectItem value="eth">ETH</SelectItem>
-                      <SelectItem value="pyusd">PYUSD</SelectItem>
+                      <SelectItem value="pyusd">PYUSD{appNetwork === "testnet" ? " (Sepolia)" : " (Mainnet)"}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
