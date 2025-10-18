@@ -180,7 +180,7 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                           <Button
                             variant="link"
                             className="h-auto p-0 text-xs"
-                            onClick={() => window.open(`https://explorer.nexus.availproject.org/intent/${intent.intentId}`, '_blank')}
+                            onClick={() => window.open(`https://explorer.nexus-folly.availproject.org/intent/${intent.intentId}`, '_blank')}
                           >
                             View Intent
                           </Button>
