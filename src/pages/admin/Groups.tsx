@@ -194,6 +194,17 @@ const Groups = () => {
       console.log('Transfer Parameters:', transferParams);
       console.log('Employee Data:', employee);
 
+      // Run simulation first
+      try {
+        console.log('=== RUNNING NEXUS SDK SIMULATION ===');
+        const simulationResult = await nexusSDK.simulateTransfer(transferParams);
+        console.log('Simulation Result:', simulationResult);
+        console.log('=== SIMULATION COMPLETE ===');
+      } catch (simulationError) {
+        console.error('Simulation Error:', simulationError);
+        console.log('Continuing with payment despite simulation error...');
+      }
+
       const transferResult = await nexusSDK.transfer(transferParams);
 
     // PRINT TRANSFER RESULT TO CONSOLE
@@ -205,16 +216,6 @@ const Groups = () => {
     if (transferResult.success) {
       console.log('Transaction Hash:', transferResult.transactionHash);
       console.log('Explorer URL:', transferResult.explorerUrl);
-      console.log('Intent ID (intentId):', (transferResult as any).intentId);
-      console.log('Intent ID (intent_id):', (transferResult as any).intent_id);
-      console.log('Intent ID (id):', (transferResult as any).id);
-      
-      // Log additional transaction hash properties
-      console.log('Source TX Hash:', (transferResult as any).sourceTxHash);
-      console.log('Deposit TX Hash:', (transferResult as any).depositTxHash);
-      console.log('Initial TX Hash:', (transferResult as any).initialTxHash);
-      console.log('Dest TX Hash:', (transferResult as any).destTxHash);
-      console.log('Fulfillment TX Hash:', (transferResult as any).fulfillmentTxHash);
     } else {
       console.log('Error:', "Transfer failed");
     }
