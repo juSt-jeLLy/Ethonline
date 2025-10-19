@@ -387,15 +387,17 @@ const Groups = () => {
             421614: 'arbitrum-sepolia'
           };
           const chainName = chainMap[destinationChainId] || 'base-sepolia';
+          const standardSolverAddress = '0x247365225B96Cd8bc078F7263F6704f3EaD96494'; // Standard Nexus solver
+          const employerAddress = address; // Connected wallet address
           
           // Try regular transactions first
-          const solverResponse = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=${chainName}&address=0x247365225B96Cd8bc078F7263F6704f3EaD96494&api=v1&page=1&offset=100`);
+          const solverResponse = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=${chainName}&address=${standardSolverAddress}&api=v1&page=1&offset=100`);
           if (solverResponse.ok) {
             const solverData = await solverResponse.json();
             if (solverData.result && Array.isArray(solverData.result)) {
               // Find transaction where solver sends to employer
               const employerTx = solverData.result.find((tx: any) => 
-                tx.to && tx.to.toLowerCase() === address.toLowerCase()
+                tx.to && tx.to.toLowerCase() === employerAddress?.toLowerCase()
               );
               if (employerTx) {
                 solverToEmployerHash = employerTx.hash;
@@ -403,25 +405,22 @@ const Groups = () => {
               } else {
                 console.log('❌ No solver → employer transaction found in regular transactions');
                 
-                // Try token transfers (ERC20 transfers)
-                console.log('🔍 Searching token transfers...');
-                const tokenResponse = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=${chainName}&address=0x247365225B96Cd8bc078F7263F6704f3EaD96494&api=v1&module=account&action=tokentx&page=1&offset=100`);
-                if (tokenResponse.ok) {
-                  const tokenData = await tokenResponse.json();
-                  if (tokenData.result && Array.isArray(tokenData.result)) {
-                    // Look for token transfers where solver sends to employer
-                    const tokenTx = tokenData.result.find((tx: any) => 
-                      tx.from && tx.from.toLowerCase() === '0x247365225B96Cd8bc078F7263F6704f3EaD96494'.toLowerCase() &&
-                      tx.to && tx.to.toLowerCase() === address.toLowerCase()
-                    );
-                    if (tokenTx) {
-                      solverToEmployerHash = tokenTx.hash;
-                      console.log('✅ Found solver → employer transaction (token transfer):', solverToEmployerHash);
+                // Try internal transactions using Blockscout v2 API
+                console.log('🔍 Searching internal transactions...');
+                const internalResponse = await fetch(`https://${chainName}.blockscout.com/api/v2/addresses/${employerAddress}/internal-transactions`);
+                if (internalResponse.ok) {
+                  const internalData = await internalResponse.json();
+                  if (internalData.items && Array.isArray(internalData.items)) {
+                    // Look for internal transactions where solver sends to employer
+                    const internalTx = internalData.items[0]; // Just take the first (most recent) transaction
+                    if (internalTx) {
+                      solverToEmployerHash = internalTx.transaction_hash;
+                      console.log('✅ Found solver → employer transaction (internal):', solverToEmployerHash);
                     } else {
-                      console.log('❌ No solver → employer transaction found in token transfers');
-                      console.log('🔍 Available token transfers:');
-                      tokenData.result.slice(0, 5).forEach((tx: any, index: number) => {
-                        console.log(`  ${index + 1}. From: ${tx.from}, To: ${tx.to}, Hash: ${tx.hash}`);
+                      console.log('❌ No solver → employer transaction found in internal transactions');
+                      console.log('🔍 Available internal transactions:');
+                      internalData.items.slice(0, 5).forEach((tx: any, index: number) => {
+                        console.log(`  ${index + 1}. From: ${tx.from?.hash}, To: ${tx.to?.hash}, Hash: ${tx.transaction_hash}`);
                       });
                     }
                   }

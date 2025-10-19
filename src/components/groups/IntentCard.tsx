@@ -26,7 +26,8 @@ const searchTransactionsWithSupabase = async (chainId: number, address: string, 
   let url;
   
   if (useInternal) {
-    url = `${supabaseUrl}?chain=${chainName}&address=${address}&api=v2&module=account&action=txlistinternal&page=1&offset=100`;
+    // Use direct Blockscout v2 internal transactions API
+    url = `https://${chainName}.blockscout.com/api/v2/addresses/${address}/internal-transactions`;
   } else if (action === 'tokentx') {
     url = `${supabaseUrl}?chain=${chainName}&address=${address}&api=v1&module=account&action=tokentx&page=1&offset=100`;
   } else {
@@ -408,28 +409,27 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                                   }
                                 }
                                 
-                                // If not found in regular transactions, try token transfers
+                                // If not found in regular transactions, try internal transactions
                                 if (!employerTx) {
-                                  console.log('❌ No transaction found in regular transactions, trying token transfers...');
-                                  const tokenTransactions = await searchTransactionsWithSupabase(intent.destinationChainId, intent.solver, false, 'tokentx');
-                                  console.log('Solver token transfers:', tokenTransactions);
+                                  console.log('❌ No transaction found in regular transactions, trying internal transactions...');
+                                  const internalTransactions = await searchTransactionsWithSupabase(intent.destinationChainId, intent.solver, true);
+                                  console.log('Solver internal transactions:', internalTransactions);
                                   
-                                  if (tokenTransactions && tokenTransactions.result) {
-                                    console.log('📊 Total token transfers found:', tokenTransactions.result.length);
+                                  if (internalTransactions && internalTransactions.items) {
+                                    console.log('📊 Total internal transactions found:', internalTransactions.items.length);
                                     
-                                    // Find token transfer where solver sends to employer
-                                    employerTx = tokenTransactions.result.find((tx: any) => 
-                                      tx.from && tx.from.toLowerCase() === intent.solver.toLowerCase() &&
-                                      tx.to && tx.to.toLowerCase() === intent.sender.toLowerCase()
-                                    );
+                                    // Just take the first (most recent) internal transaction
+                                    employerTx = internalTransactions.items[0];
                                     
                                     if (employerTx) {
-                                      console.log('✅ Found solver → employer transaction (token transfer):', employerTx.hash);
+                                      console.log('✅ Found solver → employer transaction (internal):', employerTx.transaction_hash);
+                                      // Update the hash to use the correct field
+                                      employerTx.hash = employerTx.transaction_hash;
                                     } else {
-                                      console.log('❌ No transaction found in token transfers either');
-                                      console.log('🔍 Available token transfers:');
-                                      tokenTransactions.result.slice(0, 5).forEach((tx: any, index: number) => {
-                                        console.log(`  ${index + 1}. From: ${tx.from}, To: ${tx.to}, Hash: ${tx.hash}`);
+                                      console.log('❌ No transaction found in internal transactions either');
+                                      console.log('🔍 Available internal transactions:');
+                                      internalTransactions.items.slice(0, 5).forEach((tx: any, index: number) => {
+                                        console.log(`  ${index + 1}. From: ${tx.from?.hash}, To: ${tx.to?.hash}, Hash: ${tx.transaction_hash}`);
                                       });
                                     }
                                   }
