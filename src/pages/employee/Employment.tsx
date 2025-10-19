@@ -48,13 +48,8 @@ const Employment = () => {
   const { toast } = useToast();
   const [employmentData, setEmploymentData] = useState<EmploymentData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [paymentTransactions, setPaymentTransactions] = useState<Transaction[]>([]);
-  const [employerTransactions, setEmployerTransactions] = useState<Transaction[]>([]);
-  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [monitoringCleanup, setMonitoringCleanup] = useState<(() => void) | null>(null);
-  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
-  const [isLoadingRecentTransactions, setIsLoadingRecentTransactions] = useState(false);
   const [databasePayments, setDatabasePayments] = useState<any[]>([]);
   const [isLoadingDatabasePayments, setIsLoadingDatabasePayments] = useState(false);
 
@@ -98,67 +93,9 @@ const Employment = () => {
     loadEmploymentData();
   }, [address, isConnected, toast]);
 
-  // Fetch recent transactions when address is available
-  useEffect(() => {
-    if (address && isConnected) {
-      fetchRecentTransactions();
-    }
-  }, [address, isConnected]);
+  // No longer needed - we use real-time database monitoring instead
 
-  // Load transaction data
-  const loadTransactionData = async () => {
-    if (!address || !isConnected) return;
 
-    setIsLoadingTransactions(true);
-    try {
-      // Load payment transactions (incoming to employee)
-      const paymentResult = await ProfileService.getPaymentTransactions(address, TEST_EMPLOYER_ADDRESS, 10);
-      if (paymentResult.success) {
-        setPaymentTransactions(paymentResult.data);
-        console.log('Loaded payment transactions:', paymentResult.data);
-      }
-
-      // Load employer transactions (outgoing from employer)
-      const employerResult = await ProfileService.getEmployerTransactions(TEST_EMPLOYER_ADDRESS, 20);
-      if (employerResult.success) {
-        setEmployerTransactions(employerResult.data);
-        console.log('Loaded employer transactions:', employerResult.data);
-      }
-    } catch (error) {
-      console.error('Error loading transaction data:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load transaction data. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoadingTransactions(false);
-    }
-  };
-
-  // Fetch recent transactions for the employee
-  const fetchRecentTransactions = async () => {
-    if (!address) return;
-
-    setIsLoadingRecentTransactions(true);
-    try {
-      const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=optimism-sepolia&address=${address}&api=v2`);
-      if (response.ok) {
-        const txData = await response.json();
-        console.log('Recent transactions for employee:', txData);
-        
-        // Get the last 5 transactions
-        const transactions = txData.items || txData.result || [];
-        const lastFiveTransactions = transactions.slice(0, 5);
-        console.log('Last 5 transactions:', lastFiveTransactions);
-        setRecentTransactions(lastFiveTransactions);
-      }
-    } catch (error) {
-      console.log('Error fetching recent transactions:', error);
-    } finally {
-      setIsLoadingRecentTransactions(false);
-    }
-  };
 
   const fetchDatabasePayments = async () => {
     if (!employmentData?.employee?.id) return;
@@ -182,51 +119,34 @@ const Employment = () => {
     }
   };
 
-  // Start/stop transaction monitoring
-  const toggleMonitoring = () => {
-    if (isMonitoring) {
-      // Stop monitoring
-      if (monitoringCleanup) {
-        monitoringCleanup();
-        setMonitoringCleanup(null);
-      }
-      setIsMonitoring(false);
-      toast({
-        title: "Monitoring Stopped",
-        description: "Real-time transaction monitoring has been stopped.",
-      });
-    } else {
-      // Start monitoring
-      if (address && isConnected) {
-        const cleanup = ProfileService.setupTransactionMonitoring(
-          address,
-          TEST_EMPLOYER_ADDRESS,
-          (newTransaction) => {
-            toast({
-              title: "New Payment Received!",
-              description: `Received ${newTransaction.valueFormatted} ETH from your employer.`,
-            });
-            // Refresh transaction data
-            loadTransactionData();
-          }
-        );
-        setMonitoringCleanup(() => cleanup);
-        setIsMonitoring(true);
-        toast({
-          title: "Monitoring Started",
-          description: "Real-time transaction monitoring is now active.",
-        });
-      }
-    }
-  };
 
-  // Load transactions when employment data is loaded
+  // Load payments and start monitoring when employment data is loaded
   useEffect(() => {
     if (employmentData) {
-      loadTransactionData();
       fetchDatabasePayments();
+      
+      // Automatically start monitoring for new payments
+      if (address && isConnected) {
+        console.log('🔔 Auto-starting payment monitoring...');
+        const cleanup = ProfileService.setupTransactionMonitoring(
+          address,
+          employmentData.companyEmail, // Using company email as identifier
+          (newTransaction) => {
+            toast({
+              title: "💰 New Payment Received!",
+              description: `Received ${newTransaction.valueFormatted} from your employer.`,
+            });
+            // Refresh payment data
+            fetchDatabasePayments();
+          }
+        );
+        
+        // Store cleanup function
+        setMonitoringCleanup(() => cleanup);
+        setIsMonitoring(true);
+      }
     }
-  }, [employmentData]);
+  }, [employmentData, address, isConnected, toast]);
 
   // Cleanup monitoring on unmount
   useEffect(() => {
@@ -398,15 +318,12 @@ const Employment = () => {
                     </>
                   )}
                 </Button>
-                <Button
-                  onClick={toggleMonitoring}
-                  variant={isMonitoring ? "destructive" : "default"}
-                  size="sm"
-                  className={isMonitoring ? "bg-red-500 hover:bg-red-600" : "bg-gradient-to-r from-primary to-blue-500 hover:opacity-90"}
-                >
-                  <Bell className="h-4 w-4 mr-1" />
-                  {isMonitoring ? "Stop Monitoring" : "Start Monitoring"}
-                </Button>
+                {isMonitoring && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-green-500/20 text-green-700 rounded-md text-sm">
+                    <Bell className="h-4 w-4" />
+                    Live Monitoring Active
+                  </div>
+                )}
               </div>
             </div>
             
@@ -522,3 +439,4 @@ const Employment = () => {
 };
 
 export default Employment;
+
