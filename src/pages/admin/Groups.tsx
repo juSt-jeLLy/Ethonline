@@ -653,8 +653,8 @@ const fetchUserIntents = async (page: number = 1, loadAll: boolean = false) => {
             senderToSolverHash: payment.first_tx_hash,
             solverToReceiverHash: payment.tx_hash,
             hasRealData: true,
-            sourceChainId: 11155111, // Default to Sepolia
-            destinationChainId: 11155111
+            sourceChainId: 11155111, // Source is always Sepolia (deposit chain)
+            destinationChainId: getChainId(payment.chain) // Destination based on payment chain
           }));
 
           // Merge with existing intents (avoid duplicates)

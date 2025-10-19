@@ -335,7 +335,7 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                             variant="ghost"
                             size="icon"
                             className="h-4 w-4"
-                            onClick={() => copyToClipboard(paymentData?.deposit_solver_address || intent.solver, "Solver address")}
+                            onClick={() => copyToClipboard(intent.solver, "Solver address")}
                           >
                             <Copy className="h-3 w-3" />
                           </Button>
