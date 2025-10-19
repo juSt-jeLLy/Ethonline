@@ -163,221 +163,252 @@ const Groups = () => {
     return processedGroups;
   };
 
-const handlePayEmployee = async (group: Group, employee: any) => {
-  if (!nexusSDK || !isInitialized) {
-    toast({
-      title: "Nexus SDK Not Ready",
-      description: "Please wait for Nexus SDK to initialize.",
-      variant: "destructive",
-    });
-    return { success: false, error: "Nexus SDK not ready" };
-  }
+  const handlePayEmployee = async (group: Group, employee: any) => {
+    if (!nexusSDK || !isInitialized) {
+      toast({
+        title: "Nexus SDK Not Ready",
+        description: "Please wait for Nexus SDK to initialize.",
+        variant: "destructive",
+      });
+      return { success: false, error: "Nexus SDK not ready" };
+    }
 
-  const paymentKey = `${group.id}-${employee.id}`;
-  setIsProcessingPayment(paymentKey);
-  setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'processing' }));
+    const paymentKey = `${group.id}-${employee.id}`;
+    setIsProcessingPayment(paymentKey);
+    setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'processing' }));
 
-  try {
-    validateEmployeeData(employee);
+    try {
+      validateEmployeeData(employee);
 
-    const destinationChainId = getChainId(employee.chain);
-    const tokenType = getTokenType(employee.token);
+      const destinationChainId = getChainId(employee.chain);
+      const tokenType = getTokenType(employee.token);
 
-    const transferParams = {
-      token: tokenType,
-      amount: parseFloat(employee.payment_amount || '0').toString(),
-      chainId: destinationChainId as any,
-      recipient: employee.wallet_address as `0x${string}`,
-      sourceChains: [11155111] as number[]
-    };
+      const transferParams = {
+        token: tokenType,
+        amount: parseFloat(employee.payment_amount || '0').toString(),
+        chainId: destinationChainId as any,
+        recipient: employee.wallet_address as `0x${string}`,
+        sourceChains: [11155111] as number[]
+      };
 
-    console.log('Transfer Parameters:', transferParams);
-    console.log('Employee Data:', employee);
+      console.log('Transfer Parameters:', transferParams);
+      console.log('Employee Data:', employee);
 
-    const transferResult = await nexusSDK.transfer(transferParams);
-    
+      const transferResult = await nexusSDK.transfer(transferParams);
+
     // PRINT TRANSFER RESULT TO CONSOLE
     console.log('=== TRANSFER RESULT OBJECT ===');
     console.log('TransferResult:', transferResult);
     console.log('Success:', transferResult.success);
+    console.log('All transferResult properties:', Object.keys(transferResult));
     
     if (transferResult.success) {
       console.log('Transaction Hash:', transferResult.transactionHash);
       console.log('Explorer URL:', transferResult.explorerUrl);
+      console.log('Intent ID (intentId):', (transferResult as any).intentId);
+      console.log('Intent ID (intent_id):', (transferResult as any).intent_id);
+      console.log('Intent ID (id):', (transferResult as any).id);
     } else {
       console.log('Error:', "Transfer failed");
     }
     console.log('=== END TRANSFER RESULT ===');
 
-    if (transferResult.success) {
-      setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'success' }));
-      
-      try {
-        let employmentId = employee.employment_id;
-        if (!employmentId && group.employer?.id) {
-          try {
-            const employmentResult = await ProfileService.findEmploymentId(group.employer.id, employee.id);
-            if (employmentResult.success && employmentResult.data) {
-              employmentId = employmentResult.data;
+      if (transferResult.success) {
+        setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'success' }));
+        
+        try {
+          let employmentId = employee.employment_id;
+          if (!employmentId && group.employer?.id) {
+            try {
+              const employmentResult = await ProfileService.findEmploymentId(group.employer.id, employee.id);
+              if (employmentResult.success && employmentResult.data) {
+                employmentId = employmentResult.data;
+              }
+            } catch (error) {
+              console.error('Error finding employment_id:', error);
             }
-          } catch (error) {
-            console.error('Error finding employment_id:', error);
+          }
+        
+        // Extract intent ID from transfer result - try multiple possible property names
+        const intentId = (transferResult as any).intentId || 
+                        (transferResult as any).intent_id || 
+                        (transferResult as any).id || 
+                        '';
+        
+        // Extract first transaction hash
+        const firstTxHash = transferResult.transactionHash || 
+                           (transferResult as any).txHash || 
+                           (transferResult as any).hash || 
+                           '';
+        
+        console.log('Extracted intent ID:', intentId);
+        console.log('First transaction hash:', firstTxHash);
+        
+        // If intent ID is still empty, try to extract from explorer URL
+        let finalIntentId = intentId;
+        if (!finalIntentId && transferResult.explorerUrl) {
+          const urlMatch = transferResult.explorerUrl.match(/intent\/([a-zA-Z0-9-_]+)/);
+          if (urlMatch && urlMatch[1]) {
+            finalIntentId = urlMatch[1];
+            console.log('Extracted intent ID from URL:', finalIntentId);
           }
         }
-        
-        const paymentResult = await ProfileService.savePayment({
+          
+          const paymentResult = await ProfileService.savePayment({
           employment_id: employmentId || null,
-          employer_id: group.employer?.id,
-          employee_id: employee.id,
-          chain: employee.chain,
-          token: employee.token,
-          token_contract: employee.token_contract,
-          token_decimals: employee.token_decimals,
-          amount_token: employee.payment_amount || '0',
-          recipient: employee.wallet_address,
-          tx_hash: transferResult.transactionHash,
-          status: 'confirmed'
+            employer_id: group.employer?.id,
+            employee_id: employee.id,
+            chain: employee.chain,
+            token: employee.token,
+            token_contract: employee.token_contract,
+            token_decimals: employee.token_decimals,
+            amount_token: employee.payment_amount || '0',
+            recipient: employee.wallet_address,
+            tx_hash: transferResult.transactionHash,
+          intent_id: finalIntentId,
+          first_tx_hash: firstTxHash,
+            status: 'confirmed'
+          });
+
+          if (paymentResult.success) {
+            console.log('Payment saved to database:', paymentResult.data);
+          }
+        } catch (dbError) {
+          console.error('Error saving payment to database:', dbError);
+        }
+        
+        toast({
+          title: "🎉 Payment Successful!",
+          description: `Sent ${parseFloat(employee.payment_amount || '0').toFixed(2)} ${tokenType} to ${employee.first_name} ${employee.last_name}`,
         });
 
-        if (paymentResult.success) {
-          console.log('Payment saved to database:', paymentResult.data);
-        }
-      } catch (dbError) {
-        console.error('Error saving payment to database:', dbError);
-      }
-      
-      toast({
-        title: "🎉 Payment Successful!",
-        description: `Sent ${parseFloat(employee.payment_amount || '0').toFixed(2)} ${tokenType} to ${employee.first_name} ${employee.last_name}`,
-      });
-
-      setTimeout(() => {
+        setTimeout(() => {
         fetchUserIntents(1);
       }, 3000);
 
-      return { success: true, transactionHash: transferResult.transactionHash };
+        return { success: true, transactionHash: transferResult.transactionHash };
 
-    } else {
-      console.error('Transfer failed:', transferResult);
+      } else {
+        console.error('Transfer failed:', transferResult);
+        setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'error' }));
+        
+        toast({
+          title: "❌ Payment Failed",
+          description: "Unknown error occurred during transfer",
+          variant: "destructive",
+        });
+
+        return { success: false, error: "Transfer failed" };
+      }
+
+    } catch (error) {
+      console.error('Error processing payment:', error);
       setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'error' }));
       
+      const errorMessage = error instanceof Error ? error.message : "Failed to process payment";
+      
       toast({
-        title: "❌ Payment Failed",
-        description: "Unknown error occurred during transfer",
+        title: "💸 Payment Error",
+        description: errorMessage,
         variant: "destructive",
       });
 
-      return { success: false, error: "Transfer failed" };
+      return { success: false, error: errorMessage };
+    } finally {
+      setIsProcessingPayment(null);
+    }
+  };
+
+  const handlePayAllEmployees = async (group: Group) => {
+    if (!group.employeeDetails || group.employeeDetails.length === 0) {
+      toast({
+        title: "No Employees",
+        description: "This group has no employees to pay.",
+        variant: "destructive",
+      });
+      return;
     }
 
-  } catch (error) {
-    console.error('Error processing payment:', error);
-    setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'error' }));
-    
-    const errorMessage = error instanceof Error ? error.message : "Failed to process payment";
-    
-    toast({
-      title: "💸 Payment Error",
-      description: errorMessage,
-      variant: "destructive",
-    });
+    const validEmployees = group.employeeDetails.filter(emp => 
+      emp.wallet_address && 
+      emp.wallet_address.trim() !== '' && 
+      emp.payment_amount && 
+      emp.payment_amount > 0
+    );
 
-    return { success: false, error: errorMessage };
-  } finally {
-    setIsProcessingPayment(null);
-  }
-};
-
-const handlePayAllEmployees = async (group: Group) => {
-  if (!group.employeeDetails || group.employeeDetails.length === 0) {
-    toast({
-      title: "No Employees",
-      description: "This group has no employees to pay.",
-      variant: "destructive",
-    });
-    return;
-  }
-
-  const validEmployees = group.employeeDetails.filter(emp => 
-    emp.wallet_address && 
-    emp.wallet_address.trim() !== '' && 
-    emp.payment_amount && 
-    emp.payment_amount > 0
-  );
-
-  if (validEmployees.length === 0) {
-    toast({
-      title: "No Valid Employees",
-      description: "No employees in this group have valid wallet addresses or payment amounts.",
-      variant: "destructive",
-    });
-    return;
-  }
-
-  if (validEmployees.length < group.employeeDetails.length) {
-    toast({
-      title: "Some Employees Skipped",
-      description: `${group.employeeDetails.length - validEmployees.length} employees skipped due to missing wallet addresses or payment amounts.`,
-      variant: "default",
-    });
-  }
-
-  setIsProcessingPayment(group.id);
-  
-  try {
-    let successfulPayments = 0;
-    let failedPayments = 0;
-
-    for (let i = 0; i < validEmployees.length; i++) {
-      const employee = validEmployees[i];
-      
+    if (validEmployees.length === 0) {
       toast({
-        title: "Processing Payments",
-        description: `Processing payment ${i + 1}/${validEmployees.length} for ${employee.first_name} ${employee.last_name}`,
+        title: "No Valid Employees",
+        description: "No employees in this group have valid wallet addresses or payment amounts.",
+        variant: "destructive",
       });
+      return;
+    }
+
+    if (validEmployees.length < group.employeeDetails.length) {
+      toast({
+        title: "Some Employees Skipped",
+        description: `${group.employeeDetails.length - validEmployees.length} employees skipped due to missing wallet addresses or payment amounts.`,
+        variant: "default",
+      });
+    }
+
+    setIsProcessingPayment(group.id);
+    
+    try {
+      let successfulPayments = 0;
+      let failedPayments = 0;
+
+      for (let i = 0; i < validEmployees.length; i++) {
+        const employee = validEmployees[i];
+        
+        toast({
+          title: "Processing Payments",
+          description: `Processing payment ${i + 1}/${validEmployees.length} for ${employee.first_name} ${employee.last_name}`,
+        });
 
       console.log(`=== PROCESSING PAYMENT ${i + 1}/${validEmployees.length} ===`);
       console.log('Employee:', `${employee.first_name} ${employee.last_name}`);
       console.log('Amount:', employee.payment_amount);
       console.log('Recipient:', employee.wallet_address);
       
-      const result = await handlePayEmployee(group, employee);
-      
-      if (result.success) {
-        successfulPayments++;
+        const result = await handlePayEmployee(group, employee);
+        
+        if (result.success) {
+          successfulPayments++;
+        } else {
+          failedPayments++;
+        }
+
+        if (i < validEmployees.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+
+      if (failedPayments === 0) {
+        toast({
+          title: "✅ All Payments Complete",
+          description: `Successfully processed all ${successfulPayments} payments in ${group.name}`,
+        });
       } else {
-        failedPayments++;
+        toast({
+          title: "⚠️ Payments Partially Complete",
+          description: `Completed ${successfulPayments} payments, ${failedPayments} failed in ${group.name}`,
+          variant: "destructive",
+        });
       }
 
-      if (i < validEmployees.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-    }
-
-    if (failedPayments === 0) {
+    } catch (error) {
+      console.error('Error in batch payment:', error);
       toast({
-        title: "✅ All Payments Complete",
-        description: `Successfully processed all ${successfulPayments} payments in ${group.name}`,
-      });
-    } else {
-      toast({
-        title: "⚠️ Payments Partially Complete",
-        description: `Completed ${successfulPayments} payments, ${failedPayments} failed in ${group.name}`,
+        title: "Batch Payment Error",
+        description: "Failed to process batch payment for all employees",
         variant: "destructive",
       });
+    } finally {
+      setIsProcessingPayment(null);
     }
-
-  } catch (error) {
-    console.error('Error in batch payment:', error);
-    toast({
-      title: "Batch Payment Error",
-      description: "Failed to process batch payment for all employees",
-      variant: "destructive",
-    });
-  } finally {
-    setIsProcessingPayment(null);
-  }
-};
+  };
 const fetchUserIntents = async (page: number = 1, loadAll: boolean = false) => {
   if (!nexusSDK || !isInitialized) {
     console.log('Nexus SDK not ready');
@@ -412,7 +443,7 @@ const fetchUserIntents = async (page: number = 1, loadAll: boolean = false) => {
         description: `Found ${processedIntents.length} intents`,
       });
       
-    } else {
+      } else {
       console.log('No intents found for user');
       setUserIntents([]);
       setAllUserIntents([]);
@@ -467,6 +498,7 @@ const fetchUserIntents = async (page: number = 1, loadAll: boolean = false) => {
       setIsLoadingDatabasePayments(false);
     }
   };
+
 
   const handleViewTransactionHistory = async () => {
     if (!address) {
@@ -544,10 +576,10 @@ const fetchUserIntents = async (page: number = 1, loadAll: boolean = false) => {
           ) : (
             <>
               {/* Payment Groups Section */}
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {groups.map((group, index) => (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {groups.map((group, index) => (
                   <GroupCard
-                    key={group.id}
+                  key={group.id}
                     group={group}
                     index={index}
                     isProcessingPayment={isProcessingPayment}
@@ -555,7 +587,7 @@ const fetchUserIntents = async (page: number = 1, loadAll: boolean = false) => {
                     onEdit={(groupId) => navigate(`/admin/edit-group/${groupId}`)}
                     onPayAll={handlePayAllEmployees}
                   />
-                ))}
+              ))}
               </div>
 
               {/* User Intents Section */}

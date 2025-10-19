@@ -1821,6 +1821,8 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
     amount_token: string;
     recipient: string;
     tx_hash?: string;
+    intent_id: string;
+    first_tx_hash: string;
     status?: 'pending' | 'confirmed' | 'failed';
     period_start?: string;
     period_end?: string;
@@ -1839,6 +1841,8 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
           amount_token: paymentData.amount_token,
           recipient: paymentData.recipient,
           tx_hash: paymentData.tx_hash,
+          intent_id: paymentData.intent_id,
+          first_tx_hash: paymentData.first_tx_hash,
           status: paymentData.status || 'pending',
           period_start: paymentData.period_start,
           period_end: paymentData.period_end,
@@ -1970,6 +1974,40 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
       return { success: true, data: data?.id || null };
     } catch (error) {
       console.error('Error finding employment_id:', error);
+      return { success: false, error: error.message, data: null };
+    }
+  }
+
+  // Get payment by intent ID
+  static async getPaymentByIntentId(intentId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('payments')
+        .select(`
+          *,
+          employments!inner(
+            id,
+            role,
+            payment_amount,
+            payment_frequency,
+            employees!inner(
+              id,
+              first_name,
+              last_name,
+              email
+            )
+          )
+        `)
+        .eq('intent_id', intentId)
+        .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      console.error('Error fetching payment by intent ID:', error);
       return { success: false, error: error.message, data: null };
     }
   }

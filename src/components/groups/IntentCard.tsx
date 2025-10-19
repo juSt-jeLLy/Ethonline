@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Receipt, ArrowRight, Copy, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ProfileService } from "@/lib/profileService";
+import { useState, useEffect } from "react";
 import { getBlockscoutUrl } from "@/utils/extractIntentData";
 
 interface Intent {
@@ -33,6 +35,33 @@ interface IntentCardProps {
 
 export function IntentCard({ intent, index }: IntentCardProps) {
   const { toast } = useToast();
+  const [paymentData, setPaymentData] = useState<any>(null);
+  const [isLoadingPaymentData, setIsLoadingPaymentData] = useState(false);
+
+  // Fetch payment data from database using intent ID
+  useEffect(() => {
+    const fetchPaymentData = async () => {
+      if (!intent.intentId) return;
+      
+      setIsLoadingPaymentData(true);
+      try {
+        // Get payment data directly by intent ID
+        const paymentResult = await ProfileService.getPaymentByIntentId(intent.intentId);
+        if (paymentResult.success && paymentResult.data) {
+          setPaymentData(paymentResult.data);
+          console.log('Found payment data for intent', intent.intentId, ':', paymentResult.data);
+        } else {
+          console.log('No payment data found for intent', intent.intentId);
+        }
+      } catch (error) {
+        console.error('Error fetching payment data for intent:', intent.intentId, error);
+      } finally {
+        setIsLoadingPaymentData(false);
+      }
+    };
+
+    fetchPaymentData();
+  }, [intent.intentId]);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -61,6 +90,9 @@ export function IntentCard({ intent, index }: IntentCardProps) {
               <p className="font-medium text-lg">Payment Intent #{intent.intentId}</p>
               <p className="text-sm text-muted-foreground">
                 {new Date(intent.timestamp * 1000).toLocaleDateString()} • {intent.sourceChain} → {intent.destChain}
+                {paymentData && (
+                  <span className="ml-2 text-xs text-green-600">✓ DB Data Loaded</span>
+                )}
               </p>
             </div>
           </div>
@@ -172,7 +204,7 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                     <p className="text-blue-800 font-medium">Solver Action:</p>
                     <p className="text-blue-700">Receives {intent.sourceCurrency} on {intent.sourceChain}</p>
                   </div>
-                  {intent.senderToSolverHash && (
+                  {(paymentData?.first_tx_hash || intent.senderToSolverHash) && (
                     <div className="pt-2 border-t border-blue-200/50">
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground text-xs">Deposit TX:</span>
@@ -188,7 +220,7 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                             variant="link"
                             className="h-auto p-0 text-xs"
                             onClick={() => window.open(
-                              getBlockscoutUrl(intent.sourceChainId, undefined, intent.senderToSolverHash), 
+                              getBlockscoutUrl(intent.sourceChainId, undefined, paymentData?.first_tx_hash || intent.senderToSolverHash), 
                               '_blank'
                             )}
                           >
@@ -198,13 +230,13 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                       </div>
                       <div className="flex items-center gap-1">
                         <p className="font-mono text-xs break-all">
-                          {intent.senderToSolverHash.slice(0, 10)}...{intent.senderToSolverHash.slice(-8)}
+                          {(paymentData?.first_tx_hash || intent.senderToSolverHash).slice(0, 10)}...{(paymentData?.first_tx_hash || intent.senderToSolverHash).slice(-8)}
                         </p>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-4 w-4"
-                          onClick={() => copyToClipboard(intent.senderToSolverHash, "Transaction hash")}
+                          onClick={() => copyToClipboard(paymentData?.first_tx_hash || intent.senderToSolverHash, "Transaction hash")}
                         >
                           <Copy className="h-3 w-3" />
                         </Button>
@@ -259,7 +291,21 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                     </div>
                     <div>
                       <span className="text-muted-foreground">To Receiver:</span>
-                      {intent.recipient ? (
+                      {paymentData?.recipient ? (
+                        <div className="flex items-center gap-1">
+                          <p className="font-mono text-xs break-all">
+                            {paymentData.recipient.slice(0, 8)}...{paymentData.recipient.slice(-6)}
+                          </p>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-4 w-4"
+                            onClick={() => copyToClipboard(paymentData.recipient, "Receiver address")}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : intent.recipient ? (
                         <div className="flex items-center gap-1">
                           <p className="font-mono text-xs break-all">
                             {intent.recipient.slice(0, 8)}...{intent.recipient.slice(-6)}
@@ -274,7 +320,9 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                           </Button>
                         </div>
                       ) : (
-                        <p className="text-xs text-muted-foreground">Not available</p>
+                        <p className="text-xs text-muted-foreground">
+                          {isLoadingPaymentData ? "Loading..." : "Not available"}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -296,7 +344,7 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                     <p className="text-green-800 font-medium">Solver Action:</p>
                     <p className="text-green-700">Provides {intent.destCurrency} on {intent.destChain} to Sender and sends to receiver</p>
                   </div>
-                  {intent.solverToReceiverHash && (
+                  {(paymentData?.tx_hash || intent.solverToReceiverHash) && (
                     <div className="pt-2 border-t border-green-200/50">
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground text-xs">Transfer TX:</span>
@@ -304,7 +352,7 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                           variant="link"
                           className="h-auto p-0 text-xs"
                           onClick={() => window.open(
-                            getBlockscoutUrl(intent.destinationChainId, undefined, intent.solverToReceiverHash), 
+                            getBlockscoutUrl(intent.destinationChainId, undefined, paymentData?.tx_hash || intent.solverToReceiverHash), 
                             '_blank'
                           )}
                         >
@@ -313,13 +361,13 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                       </div>
                       <div className="flex items-center gap-1">
                         <p className="font-mono text-xs break-all">
-                          {intent.solverToReceiverHash.slice(0, 10)}...{intent.solverToReceiverHash.slice(-8)}
+                          {(paymentData?.tx_hash || intent.solverToReceiverHash).slice(0, 10)}...{(paymentData?.tx_hash || intent.solverToReceiverHash).slice(-8)}
                         </p>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-4 w-4"
-                          onClick={() => copyToClipboard(intent.solverToReceiverHash, "Transaction hash")}
+                          onClick={() => copyToClipboard(paymentData?.tx_hash || intent.solverToReceiverHash, "Transaction hash")}
                         >
                           <Copy className="h-3 w-3" />
                         </Button>
