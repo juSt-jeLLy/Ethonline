@@ -203,11 +203,6 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                   <div className="bg-blue-100/50 p-2 rounded text-xs">
                     <p className="text-blue-800 font-medium">Solver Action:</p>
                     <p className="text-blue-700">Receives {intent.sourceCurrency} on {intent.sourceChain}</p>
-                    {paymentData?.first_tx_hash && (
-                      <p className="text-blue-600 text-xs mt-1">
-                        Solver: {(paymentData.deposit_solver_address || intent.solver)?.slice(0, 6)}...{(paymentData.deposit_solver_address || intent.solver)?.slice(-4)}
-                      </p>
-                    )}
                   </div>
                   {(paymentData?.first_tx_hash || intent.senderToSolverHash) && (
                     <div className="pt-2 border-t border-blue-200/50">
@@ -393,24 +388,6 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                   {intent.totalFees} {intent.sourceCurrency}
                 </span>
               </div>
-              {intent.solver && (
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Solver: </span>
-                  <div className="flex items-center gap-1">
-                    <span className="font-mono text-xs">
-                      {intent.solver.slice(0, 6)}...{intent.solver.slice(-4)}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-4 w-4"
-                      onClick={() => copyToClipboard(paymentData?.deposit_solver_address || intent.solver, "Solver address")}
-                    >
-                      <Copy className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>

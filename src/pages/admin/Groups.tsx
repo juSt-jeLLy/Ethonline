@@ -468,11 +468,11 @@ const fetchUserIntents = async (page: number = 1, loadAll: boolean = false) => {
       setAllUserIntents(processedIntents);
       setIntentsPage(page);
       
-      // Keep this summary log
-      toast({
-        title: "Debug Data Loaded",
-        description: `Found ${processedIntents.length} intents`,
-      });
+      // Debug popup disabled
+      // toast({
+      //   title: "Debug Data Loaded",
+      //   description: `Found ${processedIntents.length} intents`,
+      // });
       
       } else {
       console.log('No intents found for user');
