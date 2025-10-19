@@ -470,6 +470,12 @@ const Employment = () => {
                             <span className="text-muted-foreground">Recipient:</span>
                             <span className="font-mono text-xs">{payment.recipient?.slice(0, 6)}...{payment.recipient?.slice(-4)}</span>
                           </div>
+                          {payment.intent_id && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Intent ID:</span>
+                              <span className="font-mono text-xs">{payment.intent_id}</span>
+                            </div>
+                          )}
                         </div>
                         
                         <div className="space-y-2 text-sm">
@@ -481,9 +487,21 @@ const Employment = () => {
                             <span className="text-muted-foreground">Pay Date:</span>
                             <span>{new Date(payment.pay_date).toLocaleDateString()}</span>
                           </div>
+                          {payment.deposit_solver_address && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Deposit Solver:</span>
+                              <span className="font-mono text-xs">{payment.deposit_solver_address.slice(0, 6)}...{payment.deposit_solver_address.slice(-4)}</span>
+                            </div>
+                          )}
+                          {payment.first_tx_hash && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Deposit TX:</span>
+                              <span className="font-mono text-xs">{payment.first_tx_hash.slice(0, 6)}...{payment.first_tx_hash.slice(-4)}</span>
+                            </div>
+                          )}
                           {payment.tx_hash && (
                             <div className="flex justify-between">
-                              <span className="text-muted-foreground">TX Hash:</span>
+                              <span className="text-muted-foreground">Transfer TX:</span>
                               <span className="font-mono text-xs">{payment.tx_hash.slice(0, 6)}...{payment.tx_hash.slice(-4)}</span>
                             </div>
                           )}
@@ -496,123 +514,6 @@ const Employment = () => {
             )}
           </motion.div>
 
-          {/* Recent Wallet Transactions Section */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="space-y-4"
-          >
-            <h2 className="text-2xl font-bold flex items-center gap-2">
-              <RefreshCw className="h-6 w-6 text-primary" />
-              Recent Wallet Transactions
-            </h2>
-
-            {isLoadingRecentTransactions ? (
-              <Card className="glass-card p-6">
-                <div className="flex items-center justify-center py-8">
-                  <div className="flex items-center gap-3">
-                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                    <span className="text-muted-foreground">Loading recent transactions...</span>
-                  </div>
-                </div>
-              </Card>
-            ) : recentTransactions.length > 0 ? (
-              <Card className="glass-card p-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">Your Recent Activity</h3>
-                    <Badge className="bg-purple-500/20 text-purple-700">
-                      {recentTransactions.length} transactions
-                    </Badge>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    {recentTransactions.map((tx, index) => (
-                      <div key={index} className="flex items-center justify-between p-4 bg-white/20 rounded-lg">
-                        <div className="flex items-center space-x-3">
-                          <div className="p-2 bg-green-500/20 rounded-lg">
-                            <CheckCircle2 className="h-5 w-5 text-green-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium">
-                              {(() => {
-                                try {
-                                  if (tx.value) {
-                                    const value = parseFloat(tx.value);
-                                    if (value > 0) {
-                                      return `${(value / 1e18).toFixed(4)} ETH`;
-                                    }
-                                  }
-                                  return 'Transaction';
-                                } catch (e) {
-                                  return 'Transaction';
-                                }
-                              })()}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {tx.hash ? `${tx.hash.slice(0, 6)}...${tx.hash.slice(-4)}` : 'Unknown hash'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm text-muted-foreground">
-                            {(() => {
-                              try {
-                                if (tx.timestamp) {
-                                  const date = new Date(tx.timestamp * 1000);
-                                  if (!isNaN(date.getTime())) {
-                                    return date.toLocaleDateString();
-                                  }
-                                  return `Timestamp: ${tx.timestamp}`;
-                                } else if (tx.block_timestamp) {
-                                  const date = new Date(tx.block_timestamp);
-                                  if (!isNaN(date.getTime())) {
-                                    return date.toLocaleDateString();
-                                  }
-                                  return `Block: ${tx.block_timestamp}`;
-                                } else if (tx.created_at) {
-                                  const date = new Date(tx.created_at);
-                                  if (!isNaN(date.getTime())) {
-                                    return date.toLocaleDateString();
-                                  }
-                                  return `Created: ${tx.created_at}`;
-                                }
-                                return 'No timestamp';
-                              } catch (e) {
-                                console.log('Date parsing error:', e, tx);
-                                return `Raw: ${tx.timestamp || tx.block_timestamp || tx.created_at || 'N/A'}`;
-                              }
-                            })()}
-                          </p>
-                          <Badge variant="outline" className="mt-1">
-                            {(() => {
-                              const status = tx.status || tx.result || 'Confirmed';
-                              if (status === 'error' || status === 'failed') {
-                                return 'Failed';
-                              } else if (status === 'success' || status === 'confirmed') {
-                                return 'Confirmed';
-                              } else if (status === 'pending') {
-                                return 'Pending';
-                              }
-                              return status;
-                            })()}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </Card>
-            ) : (
-              <Card className="glass-card p-6">
-                <div className="text-center py-4">
-                  <RefreshCw className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-muted-foreground">No recent transactions found</p>
-                </div>
-              </Card>
-            )}
-          </motion.div>
 
         </motion.div>
       </div>
