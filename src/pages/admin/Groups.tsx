@@ -96,11 +96,36 @@ const Groups = () => {
 
   useEffect(() => {
     if (address) {
+      console.log('🚀 Page loaded, starting initial fetch...');
+      // Load intents from SDK (same as refresh button)
       fetchUserIntents(1);
-      // Also load existing payments from database as intents
-      loadDatabasePaymentsAsIntents();
+      
+      // Auto-refresh after page loads to get latest data
+      console.log('⏰ Setting auto-refresh timeout for 3 seconds...');
+      const autoRefreshTimeout = setTimeout(() => {
+        console.log('🔄 AUTO-REFRESH TRIGGERED - Getting latest data...');
+        fetchUserIntents(1);
+      }, 3000);
+      
+      return () => {
+        console.log('🧹 Cleaning up auto-refresh timeout');
+        clearTimeout(autoRefreshTimeout);
+      };
     }
   }, [address, groups]);
+
+  // Auto-refresh after Nexus SDK is initialized
+  useEffect(() => {
+    if (isInitialized && nexusSDK) {
+      console.log('🔄 Nexus SDK initialized, auto-refreshing payments...');
+      const refreshTimeout = setTimeout(() => {
+        console.log('🔄 AUTO-REFRESH AFTER SDK INIT - Getting latest data...');
+        fetchUserIntents(1);
+      }, 2000);
+      
+      return () => clearTimeout(refreshTimeout);
+    }
+  }, [isInitialized, nexusSDK]);
 
   const processGroupsWithWalletData = async (groups: any[]) => {
     const processedGroups: Group[] = [];
@@ -298,6 +323,7 @@ const Groups = () => {
             intent_id: finalIntentId,
             first_tx_hash: firstTxHash,
             deposit_solver_address: depositSolverAddress,
+            solver_address: '0x247365225B96Cd8bc078F7263F6704f3EaD96494', // Standard solver address
             status: 'confirmed'
           });
 
@@ -505,7 +531,8 @@ const fetchUserIntents = async (page: number = 1, loadAll: boolean = false) => {
       setUserIntents(allUserIntents.slice(0, 3));
       setShowAllIntents(false);
     } else {
-      setUserIntents(allUserIntents);
+      // Limit to 10 intents to prevent browser freeze
+      setUserIntents(allUserIntents.slice(0, 10));
       setShowAllIntents(true);
     }
   };
@@ -630,44 +657,56 @@ const fetchUserIntents = async (page: number = 1, loadAll: boolean = false) => {
 
     try {
       if (groups.length > 0 && groups[0].employer?.id) {
-        const paymentsResult = await ProfileService.getEmployerPayments(groups[0].employer.id, 20);
+        console.log('🔄 Loading database payments as intents at:', new Date().toISOString());
+        const paymentsResult = await ProfileService.getEmployerPayments(groups[0].employer.id, 10);
         
         if (paymentsResult.success && paymentsResult.data) {
           console.log('Loading database payments as intents:', paymentsResult.data);
+          console.log('Number of payments returned:', paymentsResult.data.length);
+          console.log('Intent IDs in order:', paymentsResult.data.map(p => p.intent_id));
           
           // Convert database payments to intent format
-          const databaseIntents = paymentsResult.data.map((payment: any) => ({
-            intentId: payment.intent_id,
-            sourceAmount: payment.amount_token,
-            sourceCurrency: payment.token?.toUpperCase() || 'ETH',
-            destAmount: payment.amount_token, // Assuming same amount for now
-            destCurrency: payment.token?.toUpperCase() || 'ETH',
-            sourceChain: payment.chain,
-            destChain: payment.chain, // Assuming same chain for now
-            status: payment.status === 'confirmed' ? 'SUCCESS' : 'PENDING',
-            timestamp: new Date(payment.created_at).getTime() / 1000,
-            sender: address,
-            recipient: payment.recipient,
-            solver: payment.deposit_solver_address || '0x247365225B96Cd8bc078F7263F6704f3EaD96494',
-            totalFees: '0.0001', // Default fee
-            senderToSolverHash: payment.first_tx_hash,
-            solverToReceiverHash: payment.tx_hash,
-            hasRealData: true,
-            sourceChainId: 11155111, // Source is always Sepolia (deposit chain)
-            destinationChainId: getChainId(payment.chain) // Destination based on payment chain
-          }));
+          const databaseIntents = paymentsResult.data.map((payment: any) => {
+            const destinationChainId = getChainId(payment.chain);
+            console.log(`Payment chain: ${payment.chain}, mapped to chain ID: ${destinationChainId}`);
+            
+            return {
+              intentId: payment.intent_id,
+              sourceAmount: payment.amount_token,
+              sourceCurrency: payment.token?.toUpperCase() || 'ETH',
+              destAmount: payment.amount_token, // Assuming same amount for now
+              destCurrency: payment.token?.toUpperCase() || 'ETH',
+              sourceChain: payment.chain,
+              destChain: payment.chain, // Assuming same chain for now
+              status: payment.status === 'confirmed' ? 'SUCCESS' : 'PENDING',
+              timestamp: new Date(payment.created_at).getTime() / 1000,
+              sender: address,
+              recipient: payment.recipient,
+              solver: payment.solver_address || '0x247365225B96Cd8bc078F7263F6704f3EaD96494', // Use stored solver or fallback
+              totalFees: '0.0001', // Default fee
+              senderToSolverHash: payment.first_tx_hash,
+              solverToReceiverHash: payment.tx_hash,
+              hasRealData: true,
+              sourceChainId: 11155111, // Source is always Sepolia (deposit chain)
+              destinationChainId: destinationChainId // Destination based on payment chain
+            };
+          });
 
           // Merge with existing intents (avoid duplicates)
           setUserIntents(prevIntents => {
             const existingIds = new Set(prevIntents.map(intent => intent.intentId));
             const newIntents = databaseIntents.filter(intent => !existingIds.has(intent.intentId));
-            return [...newIntents, ...prevIntents].slice(0, 3);
+            const result = [...newIntents, ...prevIntents].slice(0, 3);
+            console.log('Setting userIntents to:', result.length, 'intents');
+            return result;
           });
 
           setAllUserIntents(prevIntents => {
             const existingIds = new Set(prevIntents.map(intent => intent.intentId));
             const newIntents = databaseIntents.filter(intent => !existingIds.has(intent.intentId));
-            return [...newIntents, ...prevIntents];
+            const result = [...newIntents, ...prevIntents];
+            console.log('Setting allUserIntents to:', result.length, 'intents');
+            return result;
           });
 
           console.log('✅ Database payments loaded as intents');
