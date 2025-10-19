@@ -244,7 +244,7 @@ const Groups = () => {
         amount: parseFloat(employee.payment_amount || '0').toString(),
         chainId: destinationChainId as any,
         recipient: employee.wallet_address as `0x${string}`,
-        sourceChains: [11155111] as number[]
+        sourceChains: [getSourceChainId()] as number[]
       };
 
       console.log('Transfer Parameters:', transferParams);
@@ -357,8 +357,8 @@ const Groups = () => {
                         (transferResult as any).id || 
                         '';
         
-        // Try to get the most recent transaction hash from the user's wallet
-        const recentTxData = await getRecentTransactionHash();
+        // Try to get the most recent transaction hash from the user's wallet (on source chain)
+        const recentTxData = await getRecentTransactionHash(getSourceChainId());
         
         // Extract first transaction hash (initial deposit from user's wallet)
         // Use the recent transaction hash from wallet/Blockscout, or fallback to SDK result
@@ -374,8 +374,68 @@ const Groups = () => {
         // Extract deposit solver address from transaction data if available
         const depositSolverAddress = recentTxData.solverAddress || '';
         
+        // Try to find the solver → employer transaction hash
+        let solverToEmployerHash = '';
+        try {
+          console.log('🔍 Searching for solver → employer transaction...');
+          const destinationChainId = getChainId(employee.chain);
+          const chainMap: Record<number, string> = {
+            11155111: 'eth-sepolia',
+            11155420: 'optimism-sepolia',
+            84532: 'base-sepolia',
+            80002: 'polygon-amoy',
+            421614: 'arbitrum-sepolia'
+          };
+          const chainName = chainMap[destinationChainId] || 'base-sepolia';
+          
+          // Try regular transactions first
+          const solverResponse = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=${chainName}&address=0x247365225B96Cd8bc078F7263F6704f3EaD96494&api=v1&page=1&offset=100`);
+          if (solverResponse.ok) {
+            const solverData = await solverResponse.json();
+            if (solverData.result && Array.isArray(solverData.result)) {
+              // Find transaction where solver sends to employer
+              const employerTx = solverData.result.find((tx: any) => 
+                tx.to && tx.to.toLowerCase() === address.toLowerCase()
+              );
+              if (employerTx) {
+                solverToEmployerHash = employerTx.hash;
+                console.log('✅ Found solver → employer transaction (regular):', solverToEmployerHash);
+              } else {
+                console.log('❌ No solver → employer transaction found in regular transactions');
+                
+                // Try token transfers (ERC20 transfers)
+                console.log('🔍 Searching token transfers...');
+                const tokenResponse = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=${chainName}&address=0x247365225B96Cd8bc078F7263F6704f3EaD96494&api=v1&module=account&action=tokentx&page=1&offset=100`);
+                if (tokenResponse.ok) {
+                  const tokenData = await tokenResponse.json();
+                  if (tokenData.result && Array.isArray(tokenData.result)) {
+                    // Look for token transfers where solver sends to employer
+                    const tokenTx = tokenData.result.find((tx: any) => 
+                      tx.from && tx.from.toLowerCase() === '0x247365225B96Cd8bc078F7263F6704f3EaD96494'.toLowerCase() &&
+                      tx.to && tx.to.toLowerCase() === address.toLowerCase()
+                    );
+                    if (tokenTx) {
+                      solverToEmployerHash = tokenTx.hash;
+                      console.log('✅ Found solver → employer transaction (token transfer):', solverToEmployerHash);
+                    } else {
+                      console.log('❌ No solver → employer transaction found in token transfers');
+                      console.log('🔍 Available token transfers:');
+                      tokenData.result.slice(0, 5).forEach((tx: any, index: number) => {
+                        console.log(`  ${index + 1}. From: ${tx.from}, To: ${tx.to}, Hash: ${tx.hash}`);
+                      });
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error finding solver → employer transaction:', error);
+        }
+        
         console.log('Extracted intent ID:', intentId);
         console.log('First transaction hash (deposit):', firstTxHash);
+        console.log('Solver → employer hash:', solverToEmployerHash);
         console.log('Final transaction hash (transfer):', transferResult.transactionHash);
         console.log('Deposit solver address:', depositSolverAddress);
         
@@ -411,6 +471,7 @@ const Groups = () => {
             tx_hash: transferResult.transactionHash,
             intent_id: finalIntentId,
             first_tx_hash: firstTxHash,
+            solver_to_employer_hash: solverToEmployerHash,
             deposit_solver_address: depositSolverAddress,
             solver_address: '0x247365225B96Cd8bc078F7263F6704f3EaD96494', // Standard solver address
             status: 'confirmed'
@@ -669,8 +730,15 @@ const fetchUserIntents = async (page: number = 1, loadAll: boolean = false) => {
   };
 
 
+  // Helper function to get the source chain ID (where the user deposits from)
+  const getSourceChainId = (): number => {
+    // For now, source is always Sepolia (11155111) since that's where users connect their wallet
+    // In the future, this could be dynamic based on user's wallet connection
+    return 11155111; // Ethereum Sepolia
+  };
+
   // Get the most recent transaction hash from the user's wallet
-  const getRecentTransactionHash = async (): Promise<{ hash: string | null; solverAddress: string | null }> => {
+  const getRecentTransactionHash = async (chainId?: number): Promise<{ hash: string | null; solverAddress: string | null }> => {
     if (!address) return { hash: null, solverAddress: null };
     
     try {
@@ -694,10 +762,20 @@ const fetchUserIntents = async (page: number = 1, loadAll: boolean = false) => {
         console.log('Could not get transaction count from wallet:', error);
       }
       
-      // Method 2: Use Supabase function for Sepolia
+      // Method 2: Use Supabase function for the specified chain
       try {
-        console.log('Trying Supabase function for Sepolia (chain: eth-sepolia)...');
-        const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=eth-sepolia&address=${address}&api=v2`);
+        // Map chain ID to chain name for Supabase function
+        const chainMap: Record<number, string> = {
+          11155111: 'eth-sepolia', // Ethereum Sepolia
+          11155420: 'optimism-sepolia', // Optimism Sepolia
+          84532: 'base-sepolia', // Base Sepolia
+          80002: 'polygon-amoy', // Polygon Amoy
+          421614: 'arbitrum-sepolia' // Arbitrum Sepolia
+        };
+        
+        const chainName = chainId ? chainMap[chainId] || 'eth-sepolia' : 'eth-sepolia';
+        console.log(`Trying Supabase function for chain: ${chainName} (ID: ${chainId})...`);
+        const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=${chainName}&address=${address}&api=v2`);
         
         if (response.ok) {
           const data = await response.json();
@@ -818,7 +896,7 @@ const fetchUserIntents = async (page: number = 1, loadAll: boolean = false) => {
               senderToSolverHash: payment.first_tx_hash,
               solverToReceiverHash: payment.tx_hash,
               hasRealData: true,
-              sourceChainId: 11155111, // Source is always Sepolia (deposit chain)
+              sourceChainId: getSourceChainId(), // Source chain (deposit chain)
               destinationChainId: destinationChainId // Destination based on payment chain
             };
           });
