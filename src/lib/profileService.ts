@@ -1823,6 +1823,7 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
     tx_hash?: string;
     intent_id: string;
     first_tx_hash: string;
+    deposit_solver_address?: string;
     status?: 'pending' | 'confirmed' | 'failed';
     period_start?: string;
     period_end?: string;
@@ -1843,6 +1844,7 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
           tx_hash: paymentData.tx_hash,
           intent_id: paymentData.intent_id,
           first_tx_hash: paymentData.first_tx_hash,
+          deposit_solver_address: paymentData.deposit_solver_address,
           status: paymentData.status || 'pending',
           period_start: paymentData.period_start,
           period_end: paymentData.period_end,

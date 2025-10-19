@@ -7,7 +7,7 @@ import { Building2, ExternalLink, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ProfileService } from "@/lib/profileService";
 import { useNexus } from '@/providers/NexusProvider';
-import { useAccount } from 'wagmi';
+import { useAccount, usePublicClient, useWaitForTransactionReceipt } from 'wagmi';
 import { GroupCard } from "@/components/groups/GroupCard";
 import { IntentsSection } from "@/components/groups/IntentsSection";
 import { PaymentHistory } from "@/components/groups/PaymentHistory";
@@ -41,8 +41,9 @@ interface Group {
 const Groups = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { address } = useAccount();
+  const { address, connector } = useAccount();
   const { nexusSDK, isInitialized } = useNexus();
+  const publicClient = usePublicClient();
   
   const [groups, setGroups] = useState<Group[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -208,6 +209,13 @@ const Groups = () => {
       console.log('Intent ID (intentId):', (transferResult as any).intentId);
       console.log('Intent ID (intent_id):', (transferResult as any).intent_id);
       console.log('Intent ID (id):', (transferResult as any).id);
+      
+      // Log additional transaction hash properties
+      console.log('Source TX Hash:', (transferResult as any).sourceTxHash);
+      console.log('Deposit TX Hash:', (transferResult as any).depositTxHash);
+      console.log('Initial TX Hash:', (transferResult as any).initialTxHash);
+      console.log('Dest TX Hash:', (transferResult as any).destTxHash);
+      console.log('Fulfillment TX Hash:', (transferResult as any).fulfillmentTxHash);
     } else {
       console.log('Error:', "Transfer failed");
     }
@@ -235,14 +243,36 @@ const Groups = () => {
                         (transferResult as any).id || 
                         '';
         
-        // Extract first transaction hash
-        const firstTxHash = transferResult.transactionHash || 
+        // Try to get the most recent transaction hash from the user's wallet
+        const recentTxData = await getRecentTransactionHash();
+        
+        // Extract first transaction hash (initial deposit from user's wallet)
+        // Use the recent transaction hash from wallet/Blockscout, or fallback to SDK result
+        const firstTxHash = recentTxData.hash || 
+                           (transferResult as any).sourceTxHash || 
+                           (transferResult as any).depositTxHash || 
+                           (transferResult as any).initialTxHash ||
+                           transferResult.transactionHash || 
                            (transferResult as any).txHash || 
                            (transferResult as any).hash || 
                            '';
         
+        // Extract deposit solver address from transaction data if available
+        const depositSolverAddress = recentTxData.solverAddress || '';
+        
         console.log('Extracted intent ID:', intentId);
-        console.log('First transaction hash:', firstTxHash);
+        console.log('First transaction hash (deposit):', firstTxHash);
+        console.log('Final transaction hash (transfer):', transferResult.transactionHash);
+        console.log('Deposit solver address:', depositSolverAddress);
+        
+        // Only log if we found a different transaction hash
+        if (firstTxHash && firstTxHash !== transferResult.transactionHash) {
+          console.log('✅ Successfully captured different deposit and transfer transaction hashes using Supabase function');
+        } else if (firstTxHash) {
+          console.log('⚠️ Deposit and transfer hashes are the same - may need to wait longer for indexing');
+        } else {
+          console.log('❌ No deposit transaction hash found via Supabase function - using transfer hash as fallback');
+        }
         
         // If intent ID is still empty, try to extract from explorer URL
         let finalIntentId = intentId;
@@ -265,8 +295,9 @@ const Groups = () => {
             amount_token: employee.payment_amount || '0',
             recipient: employee.wallet_address,
             tx_hash: transferResult.transactionHash,
-          intent_id: finalIntentId,
-          first_tx_hash: firstTxHash,
+            intent_id: finalIntentId,
+            first_tx_hash: firstTxHash,
+            deposit_solver_address: depositSolverAddress,
             status: 'confirmed'
           });
 
@@ -477,6 +508,119 @@ const fetchUserIntents = async (page: number = 1, loadAll: boolean = false) => {
       setUserIntents(allUserIntents);
       setShowAllIntents(true);
     }
+  };
+
+
+  // Get the most recent transaction hash from the user's wallet
+  const getRecentTransactionHash = async (): Promise<{ hash: string | null; solverAddress: string | null }> => {
+    if (!address) return { hash: null, solverAddress: null };
+    
+    try {
+      // Wait a bit for the transaction to be indexed
+      await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
+      
+      // Method 1: Try to get transaction from wallet connection
+      try {
+        if (connector) {
+          const provider = await connector.getProvider();
+          if (provider && typeof provider === 'object' && 'request' in provider) {
+            // Try to get the transaction count to see if there are new transactions
+            const txCount = await (provider as any).request({
+              method: 'eth_getTransactionCount',
+              params: [address, 'latest']
+            });
+            console.log('Current transaction count:', txCount);
+          }
+        }
+      } catch (error) {
+        console.log('Could not get transaction count from wallet:', error);
+      }
+      
+      // Method 2: Use Supabase function for Sepolia
+      try {
+        console.log('Trying Supabase function for Sepolia (chain: eth-sepolia)...');
+        const response = await fetch(`https://memgpowzdqeuwdpueajh.functions.supabase.co/blockscout?chain=eth-sepolia&address=${address}&api=v2`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Supabase function response:', data);
+          
+          // Handle both v1 and v2 API response formats
+          let transactions = [];
+          if (data.result && Array.isArray(data.result)) {
+            // v1 API format
+            transactions = data.result;
+          } else if (data.items && Array.isArray(data.items)) {
+            // v2 API format
+            transactions = data.items;
+          } else if (Array.isArray(data)) {
+            // Direct array format
+            transactions = data;
+          }
+          
+          if (transactions.length > 0) {
+            // Get the most recent transaction
+            const latestTx = transactions[0];
+            console.log('Found recent transaction from Supabase function:', latestTx.hash);
+            console.log('Transaction details:', {
+              hash: latestTx.hash,
+              from: latestTx.from,
+              to: latestTx.to,
+              value: latestTx.value,
+              gasPrice: latestTx.gasPrice || latestTx.gas_price,
+              timestamp: latestTx.timestamp || latestTx.timeStamp
+            });
+            // Extract just the hash string from the 'to' field
+            const solverAddress = typeof latestTx.to === 'string' ? latestTx.to : latestTx.to?.hash || '';
+            console.log('Solver address (transaction destination):', solverAddress);
+            return { hash: latestTx.hash, solverAddress };
+          } else {
+            console.log('No transactions found in Supabase function response');
+          }
+        } else {
+          const errorText = await response.text();
+          console.log('Supabase function error:', response.status, errorText);
+        }
+      } catch (error) {
+        console.log('Supabase function failed:', error);
+      }
+      
+      // Method 3: Use public client as fallback
+      if (!publicClient) {
+        return null;
+      }
+      
+      // Get the latest block number
+      const blockNumber = await publicClient.getBlockNumber();
+      
+      // Check the last 20 blocks for transactions
+      for (let i = 0; i < 20; i++) {
+        try {
+          const blockNumberToCheck = blockNumber - BigInt(i);
+          const block = await publicClient.getBlock({ blockNumber: blockNumberToCheck, includeTransactions: true });
+          
+          if (block && block.transactions) {
+            // Look for transactions where the user's address is the 'from' field
+            for (const tx of block.transactions) {
+              if (typeof tx === 'object' && tx.from && tx.from.toLowerCase() === address.toLowerCase()) {
+                     console.log('Found outgoing transaction hash:', tx.hash, 'in block', blockNumberToCheck);
+                     // Extract just the hash string from the 'to' field
+                     const solverAddress = typeof tx.to === 'string' ? tx.to : tx.to?.hash || '';
+                     console.log('Solver address (transaction destination):', solverAddress);
+                     return { hash: tx.hash, solverAddress };
+              }
+            }
+          }
+        } catch (error) {
+          continue;
+        }
+      }
+      
+           return { hash: null, solverAddress: null };
+         } catch (error) {
+           console.error('Error fetching recent transaction hash:', error);
+           return { hash: null, solverAddress: null };
+         }
   };
 
   const fetchDatabasePayments = async () => {
