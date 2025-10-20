@@ -185,7 +185,7 @@ export function IntentCard({ intent, index }: IntentCardProps) {
                 <div className="space-y-3 text-sm">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <span className="text-muted-foreground">From Sender:</span>
+                      <span className="text-muted-foreground">From Employer:</span>
                       {intent.sender ? (
                         <div className="flex items-center gap-1">
                           <p className="font-mono text-xs break-all">

@@ -147,6 +147,21 @@ const getTokenDisplayInfo = (token: string) => {
   return tokenMap[token.toLowerCase()];
 };
 
+// Helper function to get chain name for Blockscout
+const getChainName = (chainId: number) => {
+  const chainMap: { [key: number]: string } = {
+    1: 'eth',
+    11155111: 'eth-sepolia',
+    8453: 'base',
+    84532: 'base-sepolia',
+    42161: 'arbitrum',
+    421614: 'arbitrum-sepolia',
+    10: 'optimism',
+    11155420: 'optimism-sepolia'
+  };
+  return chainMap[chainId] || '';
+};
+
 interface Group {
   id: string;
   name: string;
@@ -369,6 +384,7 @@ const Groups = () => {
       validateEmployeeData(employee);
 
       const destinationChainId = getChainId(employee.chain);
+      const standardSolverAddress = '0x247365225B96Cd8bc078F7263F6704f3EaD96494'; // Standard Nexus solver
       const tokenType = getTokenType(employee.token);
 
       const transferParams = {
@@ -418,6 +434,7 @@ const Groups = () => {
         signatureDescription: 'Signing deposit transaction to send tokens to solver...'
       }));
 
+      // Wait a moment to show the second signature step
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       setPaymentProgress(prev => ({ 
@@ -427,8 +444,6 @@ const Groups = () => {
         signatureStep: 3,
         signatureDescription: 'Signing direct transfer to employee on destination chain...'
       }));
-
-      await new Promise(resolve => setTimeout(resolve, 1000));
 
       setPaymentProgress(prev => ({ 
         ...prev, 
@@ -493,10 +508,32 @@ const Groups = () => {
           
           const depositSolverAddress = recentTxData.solverAddress || '';
           
+          // Find solver → employer transaction hash
+          let solverToEmployerHash = '';
+          try {
+            const chainName = getChainName(destinationChainId);
+            if (chainName && address) {
+              console.log(`🔍 Searching for solver → employer transaction on ${chainName}...`);
+              const internalResponse = await fetch(`https://${chainName}.blockscout.com/api/v2/addresses/${address}/internal-transactions`);
+              if (internalResponse.ok) {
+                const internalData = await internalResponse.json();
+                if (internalData.items && internalData.items.length > 0) {
+                  // Take the first (most recent) internal transaction
+                  const employerTx = internalData.items[0];
+                  solverToEmployerHash = employerTx.transaction_hash || '';
+                  console.log('✅ Found solver → employer transaction (internal):', solverToEmployerHash);
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error finding solver → employer transaction:', error);
+          }
+          
           console.log('Extracted intent ID:', intentId);
           console.log('First transaction hash (deposit):', firstTxHash);
           console.log('Final transaction hash (transfer):', transferResult.transactionHash);
           console.log('Deposit solver address:', depositSolverAddress);
+          console.log('Solver → employer hash:', solverToEmployerHash);
           
           if (firstTxHash && firstTxHash !== transferResult.transactionHash) {
             console.log('✅ Successfully captured different deposit and transfer transaction hashes using Supabase function');
@@ -529,7 +566,8 @@ const Groups = () => {
             intent_id: finalIntentId,
             first_tx_hash: firstTxHash,
             deposit_solver_address: depositSolverAddress,
-            solver_address: '0x247365225B96Cd8bc078F7263F6704f3EaD96494',
+            solver_address: standardSolverAddress,
+            solver_to_employer_hash: solverToEmployerHash,
             status: 'confirmed'
           });
 
