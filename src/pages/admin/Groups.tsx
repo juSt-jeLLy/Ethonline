@@ -345,7 +345,7 @@ const Groups = () => {
         clearTimeout(autoRefreshTimeout);
       };
     }
-  }, [address]); // Removed 'groups' to prevent infinite loop
+  }, [address, groups]);
 
   useEffect(() => {
     if (isInitialized && nexusSDK) {
