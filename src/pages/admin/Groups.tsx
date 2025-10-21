@@ -178,6 +178,21 @@ interface Group {
   }>;
 }
 
+// Define proper return types for payment functions
+interface PaymentSuccessResult {
+  success: true;
+  transactionHash: string;
+  preferenceUsed: number;
+}
+
+interface PaymentErrorResult {
+  success: false;
+  error: string;
+  preferenceNumber?: number;
+}
+
+type PaymentResult = PaymentSuccessResult | PaymentErrorResult;
+
 const Groups = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -201,6 +216,8 @@ const Groups = () => {
     signatureStep: number;
     totalSignatures: number;
     signatureDescription: string;
+    currentPreference: number;
+    totalPreferences: number;
   }>({
     isVisible: false,
     currentStep: '',
@@ -211,14 +228,55 @@ const Groups = () => {
     destinationChain: '',
     status: 'simulating',
     signatureStep: 0,
-    totalSignatures: 0,
-    signatureDescription: ''
+    totalSignatures: 3,
+    signatureDescription: '',
+    currentPreference: 1,
+    totalPreferences: 2
   });
   const [userIntents, setUserIntents] = useState<any[]>([]);
   const [allUserIntents, setAllUserIntents] = useState<any[]>([]);
   const [isLoadingIntents, setIsLoadingIntents] = useState(false);
   const [intentsPage, setIntentsPage] = useState(1);
   const [showAllIntents, setShowAllIntents] = useState(false);
+
+  // Function to get employee payment preferences
+  const getEmployeePaymentPreferences = async (employeeId: string): Promise<Array<{chain: string, token: string}>> => {
+    try {
+      // First, get the primary preference from the database (saved in employee profile)
+      const primaryResult = await ProfileService.getEmployeeWalletData(employeeId);
+      
+      const preferences = [];
+      
+      // Add primary preference if available
+      if (primaryResult.success && primaryResult.data) {
+        preferences.push({
+          chain: primaryResult.data.chain || 'ethereum',
+          token: primaryResult.data.token || 'usdc'
+        });
+      } else {
+        // Fallback to default primary preference
+        preferences.push({
+          chain: 'ethereum',
+          token: 'usdc'
+        });
+      }
+      
+      // Add secondary preference - always Base Sepolia USDC
+      preferences.push({
+        chain: 'base-sepolia',
+        token: 'usdc'
+      });
+      
+      return preferences;
+    } catch (error) {
+      console.error('Error getting payment preferences:', error);
+      // Return default preferences if error
+      return [
+        { chain: 'ethereum', token: 'usdc' },
+        { chain: 'base-sepolia', token: 'usdc' }
+      ];
+    }
+  };
 
   useEffect(() => {
     const loadGroups = async () => {
@@ -350,7 +408,7 @@ const Groups = () => {
     return processedGroups;
   };
 
-  const handlePayEmployee = async (group: Group, employee: any) => {
+  const handlePayEmployeeWithPreference = async (group: Group, employee: any, preference: {chain: string, token: string}, preferenceNumber: number): Promise<PaymentResult> => {
     if (!nexusSDK || !isInitialized) {
       toast({
         title: "Nexus SDK Not Ready",
@@ -361,29 +419,22 @@ const Groups = () => {
     }
 
     const paymentKey = `${group.id}-${employee.id}`;
-    setIsProcessingPayment(paymentKey);
-    setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'processing' }));
-
-    setPaymentProgress({
-      isVisible: true,
-      currentStep: 'Preparing payment...',
-      employeeName: `${employee.first_name} ${employee.last_name}`,
-      amount: `${employee.payment_amount}`,
-      token: employee.token?.toUpperCase() || 'USDC',
-      sourceChain: 'sepolia',
-      destinationChain: employee.chain || 'base-sepolia',
-      status: 'simulating',
-      signatureStep: 0,
-      totalSignatures: 3,
-      signatureDescription: 'Preparing transaction simulation...'
-    });
+    
+    // Update payment progress to show current preference
+    setPaymentProgress(prev => ({ 
+      ...prev, 
+      currentPreference: preferenceNumber,
+      currentStep: `Trying preference ${preferenceNumber}...`,
+      destinationChain: preference.chain,
+      token: preference.token
+    }));
 
     try {
       validateEmployeeData(employee);
 
-      const destinationChainId = getChainId(employee.chain);
-      const standardSolverAddress = '0x247365225B96Cd8bc078F7263F6704f3EaD96494'; // Standard Nexus solver
-      const tokenType = getTokenType(employee.token);
+      const destinationChainId = getChainId(preference.chain);
+      const standardSolverAddress = '0x247365225B96Cd8bc078F7263F6704f3EaD96494';
+      const tokenType = getTokenType(preference.token);
 
       const transferParams = {
         token: tokenType,
@@ -393,19 +444,19 @@ const Groups = () => {
         sourceChains: [11155111] as number[]
       };
 
-      console.log('Transfer Parameters:', transferParams);
+      console.log(`Transfer Parameters (Preference ${preferenceNumber}):`, transferParams);
       console.log('Employee Data:', employee);
 
       setPaymentProgress(prev => ({ 
         ...prev, 
-        currentStep: 'Simulating transaction...', 
+        currentStep: `Simulating transaction (Preference ${preferenceNumber})...`, 
         status: 'simulating',
         signatureStep: 1,
         signatureDescription: 'Simulating cross-chain transfer parameters...'
       }));
       
       try {
-        console.log('=== RUNNING NEXUS SDK SIMULATION ===');
+        console.log(`=== RUNNING NEXUS SDK SIMULATION (Preference ${preferenceNumber}) ===`);
         const simulationResult = await nexusSDK.simulateTransfer(transferParams);
         console.log('Simulation Result:', simulationResult);
         console.log('=== SIMULATION COMPLETE ===');
@@ -416,7 +467,7 @@ const Groups = () => {
 
       setPaymentProgress(prev => ({ 
         ...prev, 
-        currentStep: 'Please sign the token allowance in your wallet...', 
+        currentStep: `Please sign the token allowance (Preference ${preferenceNumber})...`, 
         status: 'signing',
         signatureStep: 1,
         signatureDescription: 'Signing token allowance to approve spending...'
@@ -426,7 +477,7 @@ const Groups = () => {
 
       setPaymentProgress(prev => ({ 
         ...prev, 
-        currentStep: 'Please sign the deposit to solver...', 
+        currentStep: `Please sign the deposit to solver (Preference ${preferenceNumber})...`, 
         status: 'signing',
         signatureStep: 2,
         signatureDescription: 'Signing deposit transaction to send tokens to solver...'
@@ -437,7 +488,7 @@ const Groups = () => {
 
       setPaymentProgress(prev => ({ 
         ...prev, 
-        currentStep: 'Please sign the direct transfer to employee...', 
+        currentStep: `Please sign the direct transfer to employee (Preference ${preferenceNumber})...`, 
         status: 'signing',
         signatureStep: 3,
         signatureDescription: 'Signing direct transfer to employee on destination chain...'
@@ -445,7 +496,7 @@ const Groups = () => {
 
       setPaymentProgress(prev => ({ 
         ...prev, 
-        currentStep: 'Confirming all transactions...', 
+        currentStep: `Confirming all transactions (Preference ${preferenceNumber})...`, 
         status: 'confirming',
         signatureStep: 3,
         signatureDescription: 'All signatures complete, confirming on blockchain...'
@@ -532,12 +583,13 @@ const Groups = () => {
             }
           }
           
-          const paymentResult = await ProfileService.savePayment({
+          // Create payment data object with preference_used
+          const paymentData = {
             employment_id: employmentId || null,
             employer_id: group.employer?.id,
             employee_id: employee.id,
-            chain: employee.chain,
-            token: employee.token,
+            chain: preference.chain,
+            token: preference.token,
             token_contract: employee.token_contract,
             token_decimals: employee.token_decimals,
             amount_token: employee.payment_amount || '0',
@@ -548,8 +600,11 @@ const Groups = () => {
             deposit_solver_address: depositSolverAddress,
             solver_address: standardSolverAddress,
             solver_to_employer_hash: solverToEmployerHash,
-            status: 'confirmed'
-          });
+            status: 'confirmed',
+            preference_used: preferenceNumber
+          } as any; // Use any to bypass TypeScript check for now
+
+          const paymentResult = await ProfileService.savePayment(paymentData);
 
           if (paymentResult.success) {
             console.log('Payment saved to database:', paymentResult.data);
@@ -602,68 +657,126 @@ const Groups = () => {
 
         toast({
           title: "🎉 Payment Successful!",
-          description: `Sent ${parseFloat(employee.payment_amount || '0').toFixed(2)} ${tokenType} to ${employee.first_name} ${employee.last_name}`,
+          description: `Sent ${parseFloat(employee.payment_amount || '0').toFixed(2)} ${tokenType} to ${employee.first_name} ${employee.last_name} (Preference ${preferenceNumber})`,
         });
 
         setTimeout(() => {
           fetchUserIntents(1);
         }, 3000);
 
-        return { success: true, transactionHash: transferResult.transactionHash };
+        return { success: true, transactionHash: transferResult.transactionHash, preferenceUsed: preferenceNumber };
 
       } else {
-        console.error('Transfer failed:', transferResult);
-        setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'error' }));
+        console.error(`Transfer failed with preference ${preferenceNumber}:`, transferResult);
         
         setPaymentProgress(prev => ({ 
           ...prev, 
-          currentStep: 'Payment failed', 
+          currentStep: `Payment failed with preference ${preferenceNumber}`, 
           status: 'error',
           signatureStep: 0,
-          signatureDescription: 'Payment failed during processing...'
+          signatureDescription: `Payment failed with preference ${preferenceNumber}...`
         }));
         
-        setTimeout(() => {
-          setPaymentProgress(prev => ({ ...prev, isVisible: false }));
-        }, 3000);
-        
-        toast({
-          title: "❌ Payment Failed",
-          description: "Unknown error occurred during transfer",
-          variant: "destructive",
-        });
-
-        return { success: false, error: "Transfer failed" };
+        // Don't hide the progress overlay yet - we might retry with next preference
+        return { success: false, error: "Transfer failed", preferenceNumber };
       }
 
     } catch (error) {
-      console.error('Error processing payment:', error);
-      setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'error' }));
+      console.error(`Error processing payment with preference ${preferenceNumber}:`, error);
       
       setPaymentProgress(prev => ({ 
         ...prev, 
-        currentStep: 'Payment failed', 
+        currentStep: `Payment failed with preference ${preferenceNumber}`, 
         status: 'error',
         signatureStep: 0,
-        signatureDescription: 'An error occurred during payment processing...'
+        signatureDescription: `An error occurred with preference ${preferenceNumber}...`
       }));
-      
-      setTimeout(() => {
-        setPaymentProgress(prev => ({ ...prev, isVisible: false }));
-      }, 3000);
       
       const errorMessage = error instanceof Error ? error.message : "Failed to process payment";
       
-      toast({
-        title: "💸 Payment Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-
-      return { success: false, error: errorMessage };
-    } finally {
-      setIsProcessingPayment(null);
+      return { success: false, error: errorMessage, preferenceNumber };
     }
+  };
+
+  const handlePayEmployee = async (group: Group, employee: any): Promise<PaymentResult> => {
+    const paymentKey = `${group.id}-${employee.id}`;
+    setIsProcessingPayment(paymentKey);
+    setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'processing' }));
+
+    // Get employee payment preferences
+    const preferences = await getEmployeePaymentPreferences(employee.id);
+    
+    setPaymentProgress({
+      isVisible: true,
+      currentStep: 'Preparing payment...',
+      employeeName: `${employee.first_name} ${employee.last_name}`,
+      amount: `${employee.payment_amount}`,
+      token: preferences[0].token?.toUpperCase() || 'USDC',
+      sourceChain: 'sepolia',
+      destinationChain: preferences[0].chain || 'base-sepolia',
+      status: 'simulating',
+      signatureStep: 0,
+      totalSignatures: 3,
+      signatureDescription: 'Preparing transaction simulation...',
+      currentPreference: 1,
+      totalPreferences: preferences.length
+    });
+
+    let finalResult: PaymentResult = { success: false, error: "All preferences failed" };
+
+    // Try each preference in order
+    for (let i = 0; i < preferences.length; i++) {
+      const preference = preferences[i];
+      const preferenceNumber = i + 1;
+
+      console.log(`🔄 Trying payment with preference ${preferenceNumber}:`, preference);
+      
+      const result = await handlePayEmployeeWithPreference(group, employee, preference, preferenceNumber);
+      
+      if (result.success) {
+        finalResult = result;
+        break; // Success, break out of the loop
+      } else {
+        console.log(`❌ Payment failed with preference ${preferenceNumber}, error:`, "Payment failed or error occurred");
+        
+        // If this is not the last preference, show retry message
+        if (i < preferences.length - 1) {
+          setPaymentProgress(prev => ({
+            ...prev,
+            currentStep: `Retrying with next preference...`,
+            status: 'simulating',
+            signatureStep: 0,
+            signatureDescription: `Preference ${preferenceNumber} failed, trying preference ${preferenceNumber + 1}...`
+          }));
+          
+          // Wait a moment before trying next preference
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        } else {
+          // Last preference also failed
+          setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'error' }));
+          setPaymentProgress(prev => ({ 
+            ...prev, 
+            currentStep: 'All payment preferences failed', 
+            status: 'error',
+            signatureStep: 0,
+            signatureDescription: 'All payment methods failed...'
+          }));
+          
+          setTimeout(() => {
+            setPaymentProgress(prev => ({ ...prev, isVisible: false }));
+          }, 3000);
+          
+          toast({
+            title: "❌ All Payment Methods Failed",
+            description: `Failed to pay ${employee.first_name} ${employee.last_name} with all preferences`,
+            variant: "destructive",
+          });
+        }
+      }
+    }
+
+    setIsProcessingPayment(null);
+    return finalResult;
   };
 
   const handlePayAllEmployees = async (group: Group) => {
@@ -1087,6 +1200,17 @@ const Groups = () => {
                     <span className="text-sm font-semibold gradient-text">{paymentProgress.amount} {paymentProgress.token}</span>
                   </motion.div>
                 )}
+
+                {/* Preference Indicator */}
+                <motion.div 
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="flex items-center gap-2 bg-blue-50 px-3 py-1 rounded-full border border-blue-200"
+                >
+                  <span className="text-xs font-semibold text-blue-700">
+                    Preference {paymentProgress.currentPreference}/{paymentProgress.totalPreferences}
+                  </span>
+                </motion.div>
               </div>
 
               {/* Status Header */}

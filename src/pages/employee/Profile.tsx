@@ -6,24 +6,39 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Save, Wallet, User, DollarSign, Loader2, QrCode, Copy, ExternalLink } from "lucide-react";
+import { Save, Wallet, User, DollarSign, Loader2, QrCode, Copy, ExternalLink, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ProfileService } from "@/lib/profileService";
 import { useAccount } from "wagmi";
 import QRCode from "qrcode";
+
+// Types for payment preferences
+interface PaymentPreference {
+  chain: string;
+  token: string;
+}
+
+interface ProfileData {
+  first_name: string;
+  last_name: string;
+  email: string;
+  walletAddress: string;
+  paymentPreferences: PaymentPreference[];
+}
 
 const Profile = () => {
   const { toast } = useToast();
   const { address, isConnected } = useAccount();
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [profileData, setProfileData] = useState({
+  const [profileData, setProfileData] = useState<ProfileData>({
     first_name: "",
     last_name: "",
     email: "",
     walletAddress: "",
-    chain: "",
-    token: "",
+    paymentPreferences: [
+      { chain: "", token: "" }, // First preference
+    ],
   });
   const [isSaved, setIsSaved] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
@@ -81,9 +96,13 @@ const Profile = () => {
             first_name: employee.first_name || "",
             last_name: employee.last_name || "",
             email: employee.email || "",
-            walletAddress: wallet?.account_address || walletAddress, // Use connected wallet if no stored wallet
-            chain: wallet?.chain || "",
-            token: wallet?.token || "",
+            walletAddress: wallet?.account_address || walletAddress,
+            paymentPreferences: [
+              { 
+                chain: wallet?.chain || "", 
+                token: wallet?.token || "" 
+              }
+            ],
           };
           
           console.log('Setting profile data to:', newProfileData);
@@ -107,7 +126,10 @@ const Profile = () => {
         if (walletAddress) {
           setProfileData(prev => ({
             ...prev,
-            walletAddress: walletAddress
+            walletAddress: walletAddress,
+            paymentPreferences: [
+              { chain: "", token: "" }
+            ]
           }));
           console.log('✅ Pre-filled wallet address from Web3 connection');
         }
@@ -117,8 +139,51 @@ const Profile = () => {
     };
 
     loadProfile();
-  }, [address, isConnected]); // Re-run when wallet connection changes
+  }, [address, isConnected]);
 
+  // Update payment preference
+  const updatePaymentPreference = (index: number, field: keyof PaymentPreference, value: string) => {
+    setProfileData(prev => ({
+      ...prev,
+      paymentPreferences: prev.paymentPreferences.map((pref, i) => 
+        i === index ? { ...pref, [field]: value } : pref
+      )
+    }));
+  };
+
+  // Add new payment preference (max 2)
+  const addPaymentPreference = () => {
+    if (profileData.paymentPreferences.length >= 2) {
+      toast({
+        title: "Maximum reached",
+        description: "You can only have up to 2 payment preferences",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setProfileData(prev => ({
+      ...prev,
+      paymentPreferences: [...prev.paymentPreferences, { chain: "", token: "" }]
+    }));
+  };
+
+  // Remove payment preference
+  const removePaymentPreference = (index: number) => {
+    if (profileData.paymentPreferences.length <= 1) {
+      toast({
+        title: "Cannot remove",
+        description: "You must have at least one payment preference",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setProfileData(prev => ({
+      ...prev,
+      paymentPreferences: prev.paymentPreferences.filter((_, i) => i !== index)
+    }));
+  };
 
   const handleSave = async () => {
     setIsLoading(true);
@@ -130,8 +195,8 @@ const Profile = () => {
         last_name: profileData.last_name,
         email: profileData.email,
         wallet_address: profileData.walletAddress,
-        preferred_chain: profileData.chain,
-        preferred_token: profileData.token,
+        preferred_chain: profileData.paymentPreferences[0]?.chain || "", // Keep for backward compatibility
+        preferred_token: profileData.paymentPreferences[0]?.token || "", // Keep for backward compatibility
       });
 
       console.log('Save result:', result);
@@ -171,6 +236,8 @@ const Profile = () => {
     visible: { opacity: 1, x: 0 },
   };
 
+  const canAddMorePreferences = profileData.paymentPreferences.length < 2;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-cyan-50">
       <Navbar role="employee" />
@@ -184,7 +251,6 @@ const Profile = () => {
           <div className="space-y-2">
             <h1 className="text-4xl font-bold gradient-text">Payment Profile</h1>
             <p className="text-muted-foreground">Your payment preferences and information</p>
-            
           </div>
 
           {/* Profile Summary Card - Shows when saved */}
@@ -197,32 +263,42 @@ const Profile = () => {
                 className="glass-card p-8 hover-lift cursor-pointer"
                 onClick={() => setIsEditing(true)}
               >
-                <div className="space-y-4">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-3 flex-1">
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-1">Name</p>
-                        <p className="text-lg font-semibold">{`${profileData.first_name} ${profileData.last_name}`.trim() || "Not set"}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-1">Wallet Address</p>
-                        <p className="text-sm font-mono">{profileData.walletAddress || "Not set"}</p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-sm text-muted-foreground mb-1">Chain</p>
-                          <p className="font-medium capitalize">{profileData.chain || "Not set"}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground mb-1">Token</p>
-                          <p className="font-medium uppercase">{profileData.token || "Not set"}</p>
-                        </div>
-                      </div>
+                <div className="space-y-6">
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Name</p>
+                      <p className="text-lg font-semibold">{`${profileData.first_name} ${profileData.last_name}`.trim() || "Not set"}</p>
                     </div>
-                    <Button variant="outline" size="sm">
-                      Edit
-                    </Button>
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Wallet Address</p>
+                      <p className="text-sm font-mono">{profileData.walletAddress || "Not set"}</p>
+                    </div>
                   </div>
+
+                  {/* Payment Preferences */}
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-lg">Payment Preferences</h3>
+                    {profileData.paymentPreferences.map((pref, index) => (
+                      <div key={index} className="p-4 border rounded-lg bg-white/50">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium text-sm text-muted-foreground">
+                            {index === 0 ? "Primary Preference" : "Secondary Preference"}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Chain</p>
+                            <p className="font-medium capitalize">{pref.chain || "Not set"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Token</p>
+                            <p className="font-medium uppercase">{pref.token || "Not set"}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
                   <p className="text-xs text-muted-foreground pt-2 border-t">
                     Click anywhere to edit your payment details
                   </p>
@@ -300,137 +376,182 @@ const Profile = () => {
 
           {/* Edit Form - Shows when editing or not saved yet */}
           {(!isSaved || isEditing) && (
+            <motion.div
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+            >
+              <Card className="glass-card p-8 hover-lift">
+                <div className="space-y-6">
+                  {/* Personal Information */}
+                  <motion.div variants={itemVariants} className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="first_name" className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-primary" />
+                        First Name
+                      </Label>
+                      <Input
+                        id="first_name"
+                        placeholder="Enter your first name"
+                        value={profileData.first_name}
+                        onChange={(e) => setProfileData({ ...profileData, first_name: e.target.value })}
+                        className="glass-card border-white/20"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="last_name" className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-primary" />
+                        Last Name
+                      </Label>
+                      <Input
+                        id="last_name"
+                        placeholder="Enter your last name"
+                        value={profileData.last_name}
+                        onChange={(e) => setProfileData({ ...profileData, last_name: e.target.value })}
+                        className="glass-card border-white/20"
+                      />
+                    </div>
+                  </motion.div>
 
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-          >
-            <Card className="glass-card p-8 hover-lift">
-              <div className="space-y-6">
-                <motion.div variants={itemVariants} className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="first_name" className="flex items-center gap-2">
+                  <motion.div variants={itemVariants} className="space-y-2">
+                    <Label htmlFor="email" className="flex items-center gap-2">
                       <User className="h-4 w-4 text-primary" />
-                      First Name
+                      Email Address
                     </Label>
                     <Input
-                      id="first_name"
-                      placeholder="Enter your first name"
-                      value={profileData.first_name}
-                      onChange={(e) => setProfileData({ ...profileData, first_name: e.target.value })}
+                      id="email"
+                      type="email"
+                      placeholder="Enter your email"
+                      value={profileData.email}
+                      onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
                       className="glass-card border-white/20"
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="last_name" className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-primary" />
-                      Last Name
+                  </motion.div>
+
+                  <motion.div variants={itemVariants} className="space-y-2">
+                    <Label htmlFor="wallet" className="flex items-center gap-2">
+                      <Wallet className="h-4 w-4 text-primary" />
+                      Wallet Address
                     </Label>
                     <Input
-                      id="last_name"
-                      placeholder="Enter your last name"
-                      value={profileData.last_name}
-                      onChange={(e) => setProfileData({ ...profileData, last_name: e.target.value })}
-                      className="glass-card border-white/20"
+                      id="wallet"
+                      placeholder="0x..."
+                      value={profileData.walletAddress}
+                      onChange={(e) => setProfileData({ ...profileData, walletAddress: e.target.value })}
+                      className="glass-card border-white/20 font-mono"
                     />
-                  </div>
-                </motion.div>
+                  </motion.div>
 
-                <motion.div variants={itemVariants} className="space-y-2">
-                  <Label htmlFor="email" className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-primary" />
-                    Email Address
-                  </Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="Enter your email"
-                    value={profileData.email}
-                    onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                    className="glass-card border-white/20"
-                  />
-                </motion.div>
+                  {/* Payment Preferences */}
+                  <motion.div variants={itemVariants} className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-base font-semibold flex items-center gap-2">
+                        <DollarSign className="h-4 w-4 text-primary" />
+                        Payment Preferences {`(${profileData.paymentPreferences.length}/2)`}
+                      </Label>
+                      {canAddMorePreferences && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={addPaymentPreference}
+                          className="flex items-center gap-2"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add Preference
+                        </Button>
+                      )}
+                    </div>
 
-                <motion.div variants={itemVariants} className="space-y-2">
-                  <Label htmlFor="wallet" className="flex items-center gap-2">
-                    <Wallet className="h-4 w-4 text-primary" />
-                    Wallet Address
-                  </Label>
-                  <Input
-                    id="wallet"
-                    placeholder="0x..."
-                    value={profileData.walletAddress}
-                    onChange={(e) => setProfileData({ ...profileData, walletAddress: e.target.value })}
-                    className="glass-card border-white/20 font-mono"
-                  />
-                </motion.div>
+                    <div className="space-y-4">
+                      {profileData.paymentPreferences.map((pref, index) => (
+                        <div key={index} className="p-4 border rounded-lg bg-white/50 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-sm">
+                              {index === 0 ? "Primary Preference" : "Secondary Preference"}
+                            </span>
+                            {profileData.paymentPreferences.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removePaymentPreference(index)}
+                                className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
 
-                <motion.div variants={itemVariants} className="grid md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <DollarSign className="h-4 w-4 text-primary" />
-                      Preferred Chain
-                    </Label>
-                    <Select value={profileData.chain} onValueChange={(value) => setProfileData({ ...profileData, chain: value })}>
-                      <SelectTrigger className="glass-card border-white/20">
-                        <SelectValue placeholder="Select chain" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ethereum">Sepolia</SelectItem>
-                        <SelectItem value="polygon">Amoy</SelectItem>
-                        <SelectItem value="arbitrum">Arbitrum Sepolia</SelectItem>
-                        <SelectItem value="optimism">Op Sepolia</SelectItem>
-                        <SelectItem value="base">Base Sepolia</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                          <div className="grid md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label className="text-sm">Chain</Label>
+                              <Select 
+                                value={pref.chain} 
+                                onValueChange={(value) => updatePaymentPreference(index, 'chain', value)}
+                              >
+                                <SelectTrigger className="glass-card border-white/20">
+                                  <SelectValue placeholder="Select chain" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="ethereum">Sepolia</SelectItem>
+                                  <SelectItem value="polygon">Amoy</SelectItem>
+                                  <SelectItem value="arbitrum">Arbitrum Sepolia</SelectItem>
+                                  <SelectItem value="optimism">Op Sepolia</SelectItem>
+                                  <SelectItem value="base">Base Sepolia</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
 
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <DollarSign className="h-4 w-4 text-primary" />
-                      Preferred Token
-                    </Label>
-                    <Select value={profileData.token} onValueChange={(value) => setProfileData({ ...profileData, token: value })}>
-                      <SelectTrigger className="glass-card border-white/20">
-                        <SelectValue placeholder="Select token" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="usdc">USDC</SelectItem>
-                        <SelectItem value="usdt">USDT</SelectItem>
-                        <SelectItem value="eth">ETH</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </motion.div>
+                            <div className="space-y-2">
+                              <Label className="text-sm">Token</Label>
+                              <Select 
+                                value={pref.token} 
+                                onValueChange={(value) => updatePaymentPreference(index, 'token', value)}
+                              >
+                                <SelectTrigger className="glass-card border-white/20">
+                                  <SelectValue placeholder="Select token" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="usdc">USDC</SelectItem>
+                                  <SelectItem value="usdt">USDT</SelectItem>
+                                  <SelectItem value="eth">ETH</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
 
-                <motion.div variants={itemVariants} className="flex gap-3">
-                  <Button
-                    onClick={handleSave}
-                    disabled={isLoading}
-                    size="lg"
-                    className="flex-1 bg-gradient-to-r from-primary to-blue-500 hover:opacity-90 transition-opacity disabled:opacity-50"
-                  >
-                    {isLoading ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Save className="mr-2 h-4 w-4" />
-                    )}
-                    {isLoading ? "Saving..." : "Save Profile"}
-                  </Button>
-                  {isEditing && (
+                  <motion.div variants={itemVariants} className="flex gap-3">
                     <Button
-                      onClick={() => setIsEditing(false)}
-                      variant="outline"
+                      onClick={handleSave}
+                      disabled={isLoading}
                       size="lg"
+                      className="flex-1 bg-gradient-to-r from-primary to-blue-500 hover:opacity-90 transition-opacity disabled:opacity-50"
                     >
-                      Cancel
+                      {isLoading ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Save className="mr-2 h-4 w-4" />
+                      )}
+                      {isLoading ? "Saving..." : "Save Profile"}
                     </Button>
-                  )}
-                </motion.div>
-              </div>
-            </Card>
-          </motion.div>
+                    {isEditing && (
+                      <Button
+                        onClick={() => setIsEditing(false)}
+                        variant="outline"
+                        size="lg"
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </motion.div>
+                </div>
+              </Card>
+            </motion.div>
           )}
 
           {/* Info Card */}
@@ -448,7 +569,7 @@ const Profile = () => {
                   <div>
                     <h3 className="font-semibold mb-1">Payment Information</h3>
                     <p className="text-sm text-muted-foreground">
-                      Your payment details are encrypted and securely stored. You can update them anytime.
+                      You can add up to 2 payment preferences. Your payment details are encrypted and securely stored.
                     </p>
                   </div>
                 </div>
