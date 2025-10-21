@@ -836,7 +836,12 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
         employees: employees,
         totalPayment: totalPayment,
         status: 'Active', // Default status
-        created_at: data[0].created_at
+        created_at: data[0].created_at,
+        // Add payment schedule fields from the first employment record
+        payment_frequency: data[0].payment_frequency,
+        payment_start_date: data[0].payment_start_date,
+        payment_end_date: data[0].payment_end_date,
+        payment_day_of_week: data[0].payment_day_of_week
       };
 
       return { success: true, data: groupData };
@@ -2125,6 +2130,37 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
     } catch (error) {
       console.error('Error fetching payment by intent ID:', error);
       return { success: false, error: error.message, data: null };
+    }
+  }
+
+  // Update payment schedule for a group/employer
+  static async updatePaymentSchedule(employerId: string, scheduleData: {
+    payment_frequency: string;
+    payment_start_date: string;
+    payment_end_date?: string;
+    payment_day_of_week: string;
+  }) {
+    try {
+      const { data, error } = await supabase
+        .from('employments')
+        .update({
+          payment_frequency: scheduleData.payment_frequency,
+          payment_start_date: scheduleData.payment_start_date,
+          payment_end_date: scheduleData.payment_end_date || null,
+          payment_day_of_week: scheduleData.payment_day_of_week,
+          updated_at: new Date().toISOString()
+        })
+        .eq('employer_id', employerId)
+        .select();
+
+      if (error) {
+        throw error;
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      console.error('Error updating payment schedule:', error);
+      return { success: false, error: error.message };
     }
   }
 }
