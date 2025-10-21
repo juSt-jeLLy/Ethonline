@@ -698,7 +698,7 @@ const Groups = () => {
     }
   };
 
-  const handlePayEmployee = async (group: Group, employee: any): Promise<PaymentResult> => {
+const handlePayEmployee = async (group: Group, employee: any): Promise<PaymentResult> => {
     const paymentKey = `${group.id}-${employee.id}`;
     setIsProcessingPayment(paymentKey);
     setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'processing' }));
@@ -708,7 +708,7 @@ const Groups = () => {
     
     setPaymentProgress({
       isVisible: true,
-      currentStep: 'Preparing payment...',
+      currentStep: 'Comparing payment preferences...',
       employeeName: `${employee.first_name} ${employee.last_name}`,
       amount: `${employee.payment_amount}`,
       token: preferences[0].token?.toUpperCase() || 'USDC',
@@ -717,42 +717,187 @@ const Groups = () => {
       status: 'simulating',
       signatureStep: 0,
       totalSignatures: 3,
-      signatureDescription: 'Preparing transaction simulation...',
+      signatureDescription: 'Simulating both preferences to find best option...',
       currentPreference: 1,
       totalPreferences: preferences.length
     });
 
     let finalResult: PaymentResult = { success: false, error: "All preferences failed" };
 
-    // Try each preference in order
-    for (let i = 0; i < preferences.length; i++) {
-      const preference = preferences[i];
-      const preferenceNumber = i + 1;
-
-      console.log(`🔄 Trying payment with preference ${preferenceNumber}:`, preference);
+    // Simulate both preferences to compare costs
+    try {
+      console.log('🔍 Simulating both preferences to find best option...');
       
-      const result = await handlePayEmployeeWithPreference(group, employee, preference, preferenceNumber);
+      const simulations = [];
+      for (let i = 0; i < preferences.length; i++) {
+        const preference = preferences[i];
+        const preferenceNumber = i + 1;
+        
+        try {
+          const destinationChainId = getChainId(preference.chain);
+          const tokenType = getTokenType(preference.token);
+
+          const transferParams = {
+            token: tokenType,
+            amount: parseFloat(employee.payment_amount || '0').toString(),
+            chainId: destinationChainId as any,
+            recipient: employee.wallet_address as `0x${string}`,
+            sourceChains: [11155111] as number[]
+          };
+
+          console.log(`Simulating preference ${preferenceNumber}:`, preference);
+          const simulationResult = await nexusSDK!.simulateTransfer(transferParams);
+          
+          console.log(`Preference ${preferenceNumber} simulation result:`, simulationResult);
+          
+          // Extract fees from simulation - based on SDK types
+          let fees = 0;
+          
+          if (simulationResult?.intent?.fees !== undefined) {
+            // Direct fees value (number)
+            if (typeof simulationResult.intent.fees === 'number') {
+              fees = simulationResult.intent.fees;
+            } 
+            // String fees that need parsing
+            else if (typeof simulationResult.intent.fees === 'string') {
+              fees = parseFloat(simulationResult.intent.fees) || 0;
+            }
+            // Object with structure: { caGas, gasSupplied, protocol, solver, total }
+            else if (typeof simulationResult.intent.fees === 'object') {
+              // Use 'total' property as per SDK type definition
+              if ('total' in simulationResult.intent.fees) {
+                fees = parseFloat(String(simulationResult.intent.fees.total)) || 0;
+              }
+              // Fallback to other possible properties
+              else if ('amount' in simulationResult.intent.fees) {
+                fees = parseFloat(String((simulationResult.intent.fees as any).amount)) || 0;
+              }
+            }
+          }
+          
+          console.log(`Preference ${preferenceNumber} extracted fees:`, fees, 'Type:', typeof fees);
+          
+          simulations.push({
+            preferenceNumber,
+            preference,
+            fees: typeof fees === 'number' && !isNaN(fees) ? fees : 0,
+            simulationResult,
+            simulationSuccess: true
+          });
+        } catch (error) {
+          console.error(`Failed to simulate preference ${preferenceNumber}:`, error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.log(`Simulation error message: ${errorMessage}`);
+          
+          // If simulation fails, mark as failed
+          simulations.push({
+            preferenceNumber,
+            preference,
+            fees: 0,
+            simulationResult: null,
+            simulationFailed: true,
+            errorMessage
+          });
+        }
+      }
+
+      // Find preference 1 and preference 2 simulations
+      const pref1Simulation = simulations.find(s => s.preferenceNumber === 1);
+      const pref2Simulation = simulations.find(s => s.preferenceNumber === 2);
+      
+      let selectedSimulation;
+      
+      // If either simulation failed, fall back to sequential trying
+      if (!pref1Simulation || !pref2Simulation || 
+          (pref1Simulation as any).simulationFailed || 
+          (pref2Simulation as any).simulationFailed ||
+          typeof pref1Simulation.fees !== 'number' ||
+          typeof pref2Simulation.fees !== 'number') {
+        console.log('⚠️ Simulation incomplete or failed, using preference 1 as default');
+        selectedSimulation = pref1Simulation || simulations[0];
+      } else {
+        // Check if preference 1 fees are more than 2 USDC
+        if (pref1Simulation.fees > 2) {
+          // Pref 1 exceeds 2 USDC, but check if pref 2 has even higher fees
+          if (pref2Simulation.fees > pref1Simulation.fees) {
+            // Pref 2 has higher fees than pref 1, so use pref 1 anyway
+            selectedSimulation = pref1Simulation;
+            console.log(`💡 Preference 1 fees (${pref1Simulation.fees.toFixed(4)} USDC) exceed 2 USDC, but preference 2 fees (${pref2Simulation.fees.toFixed(4)} USDC) are even higher - using preference 1`);
+            
+            toast({
+              title: "Using Preference 1",
+              description: `Preference 2 fees (${pref2Simulation.fees.toFixed(2)} USDC) are higher than preference 1 (${pref1Simulation.fees.toFixed(2)} USDC)`,
+            });
+          } else {
+            // Pref 2 has lower fees, use it
+            selectedSimulation = pref2Simulation;
+            console.log(`💡 Preference 1 fees (${pref1Simulation.fees.toFixed(4)} USDC) exceed 2 USDC threshold, choosing preference 2 (${pref2Simulation.fees.toFixed(4)} USDC)`);
+            
+            toast({
+              title: "Cost Optimization",
+              description: `Using preference 2 - Preference 1 fees (${pref1Simulation.fees.toFixed(2)} USDC) exceed 2 USDC threshold`,
+            });
+          }
+        } else {
+          selectedSimulation = pref1Simulation;
+          console.log(`💡 Using preference 1 (fees: ${pref1Simulation.fees.toFixed(4)} USDC)`);
+        }
+      }
+
+      // Update progress with selected preference
+      setPaymentProgress(prev => ({
+        ...prev,
+        currentStep: `Selected preference ${selectedSimulation.preferenceNumber} (fee: ${selectedSimulation.fees.toFixed(4)} USDC)`,
+        currentPreference: selectedSimulation.preferenceNumber,
+        destinationChain: selectedSimulation.preference.chain,
+        token: selectedSimulation.preference.token,
+        signatureDescription: `Processing with most cost-effective option...`
+      }));
+
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Try selected preference first
+      const result = await handlePayEmployeeWithPreference(
+        group, 
+        employee, 
+        selectedSimulation.preference, 
+        selectedSimulation.preferenceNumber
+      );
       
       if (result.success) {
         finalResult = result;
-        break; // Success, break out of the loop
       } else {
-        console.log(`❌ Payment failed with preference ${preferenceNumber}, error:`, "Payment failed or error occurred");
+        // If selected preference fails, try remaining preferences
+        console.log(`❌ Selected preference ${selectedSimulation.preferenceNumber} failed, trying other preferences...`);
         
-        // If this is not the last preference, show retry message
-        if (i < preferences.length - 1) {
-          setPaymentProgress(prev => ({
-            ...prev,
-            currentStep: `Retrying with next preference...`,
-            status: 'simulating',
-            signatureStep: 0,
-            signatureDescription: `Preference ${preferenceNumber} failed, trying preference ${preferenceNumber + 1}...`
-          }));
-          
-          // Wait a moment before trying next preference
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        } else {
-          // Last preference also failed
+        for (const sim of simulations) {
+          if (sim.preferenceNumber !== selectedSimulation.preferenceNumber) {
+            setPaymentProgress(prev => ({
+              ...prev,
+              currentStep: `Retrying with preference ${sim.preferenceNumber}...`,
+              status: 'simulating',
+              signatureStep: 0,
+              signatureDescription: `Trying preference ${sim.preferenceNumber} as fallback...`
+            }));
+            
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            const fallbackResult = await handlePayEmployeeWithPreference(
+              group, 
+              employee, 
+              sim.preference, 
+              sim.preferenceNumber
+            );
+            
+            if (fallbackResult.success) {
+              finalResult = fallbackResult;
+              break;
+            }
+          }
+        }
+        
+        // If all preferences failed
+        if (!finalResult.success) {
           setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'error' }));
           setPaymentProgress(prev => ({ 
             ...prev, 
@@ -773,12 +918,64 @@ const Groups = () => {
           });
         }
       }
+
+    } catch (error) {
+      console.error('Error in simulation comparison:', error);
+      
+      // Fallback to sequential preference trying if simulation fails
+      console.log('⚠️ Simulation comparison failed, falling back to sequential preference trying...');
+      
+      for (let i = 0; i < preferences.length; i++) {
+        const preference = preferences[i];
+        const preferenceNumber = i + 1;
+
+        console.log(`🔄 Trying payment with preference ${preferenceNumber}:`, preference);
+        
+        const result = await handlePayEmployeeWithPreference(group, employee, preference, preferenceNumber);
+        
+        if (result.success) {
+          finalResult = result;
+          break;
+        } else {
+          console.log(`❌ Payment failed with preference ${preferenceNumber}, error:`, "Payment failed or error occurred");
+          
+          if (i < preferences.length - 1) {
+            setPaymentProgress(prev => ({
+              ...prev,
+              currentStep: `Retrying with next preference...`,
+              status: 'simulating',
+              signatureStep: 0,
+              signatureDescription: `Preference ${preferenceNumber} failed, trying preference ${preferenceNumber + 1}...`
+            }));
+            
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          } else {
+            setPaymentStatus(prev => ({ ...prev, [paymentKey]: 'error' }));
+            setPaymentProgress(prev => ({ 
+              ...prev, 
+              currentStep: 'All payment preferences failed', 
+              status: 'error',
+              signatureStep: 0,
+              signatureDescription: 'All payment methods failed...'
+            }));
+            
+            setTimeout(() => {
+              setPaymentProgress(prev => ({ ...prev, isVisible: false }));
+            }, 3000);
+            
+            toast({
+              title: "❌ All Payment Methods Failed",
+              description: `Failed to pay ${employee.first_name} ${employee.last_name} with all preferences`,
+              variant: "destructive",
+            });
+          }
+        }
+      }
     }
 
     setIsProcessingPayment(null);
     return finalResult;
   };
-
   const handlePayAllEmployees = async (group: Group) => {
     if (!group.employeeDetails || group.employeeDetails.length === 0) {
       toast({
