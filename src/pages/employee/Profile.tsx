@@ -24,6 +24,7 @@ interface ProfileData {
   email: string;
   walletAddress: string;
   paymentPreferences: PaymentPreference[];
+  secondaryPreferences: PaymentPreference[];
 }
 
 const Profile = () => {
@@ -39,6 +40,7 @@ const Profile = () => {
     paymentPreferences: [
       { chain: "", token: "" }, // First preference
     ],
+    secondaryPreferences: []
   });
   const [isSaved, setIsSaved] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
@@ -103,6 +105,12 @@ const Profile = () => {
                 token: wallet?.token || "" 
               }
             ],
+            secondaryPreferences: wallet?.secondary_chain_preference && wallet?.secondary_token_preference ? [
+              {
+                chain: wallet.secondary_chain_preference,
+                token: wallet.secondary_token_preference
+              }
+            ] : [],
           };
           
           console.log('Setting profile data to:', newProfileData);
@@ -129,7 +137,8 @@ const Profile = () => {
             walletAddress: walletAddress,
             paymentPreferences: [
               { chain: "", token: "" }
-            ]
+            ],
+            secondaryPreferences: []
           }));
           console.log('✅ Pre-filled wallet address from Web3 connection');
         }
@@ -197,6 +206,8 @@ const Profile = () => {
         wallet_address: profileData.walletAddress,
         preferred_chain: profileData.paymentPreferences[0]?.chain || "", // Keep for backward compatibility
         preferred_token: profileData.paymentPreferences[0]?.token || "", // Keep for backward compatibility
+        secondary_chain: profileData.secondaryPreferences[0]?.chain || "",
+        secondary_token: profileData.secondaryPreferences[0]?.token || "",
       });
 
       console.log('Save result:', result);
@@ -278,11 +289,13 @@ const Profile = () => {
                   {/* Payment Preferences */}
                   <div className="space-y-4">
                     <h3 className="font-semibold text-lg">Payment Preferences</h3>
+                    
+                    {/* Primary Preference */}
                     {profileData.paymentPreferences.map((pref, index) => (
                       <div key={index} className="p-4 border rounded-lg bg-white/50">
                         <div className="flex items-center justify-between mb-2">
                           <span className="font-medium text-sm text-muted-foreground">
-                            {index === 0 ? "Primary Preference" : "Secondary Preference"}
+                            Primary Preference
                           </span>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -297,6 +310,27 @@ const Profile = () => {
                         </div>
                       </div>
                     ))}
+                    
+                    {/* Secondary Preference */}
+                    {profileData.secondaryPreferences.length > 0 && (
+                      <div className="p-4 border rounded-lg bg-white/50">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium text-sm text-muted-foreground">
+                            Secondary Preference
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Chain</p>
+                            <p className="font-medium capitalize">{profileData.secondaryPreferences[0]?.chain || "Not set"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Token</p>
+                            <p className="font-medium uppercase">{profileData.secondaryPreferences[0]?.token || "Not set"}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <p className="text-xs text-muted-foreground pt-2 border-t">
@@ -443,45 +477,17 @@ const Profile = () => {
                   </motion.div>
 
                   {/* Payment Preferences */}
-                  <motion.div variants={itemVariants} className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-base font-semibold flex items-center gap-2">
-                        <DollarSign className="h-4 w-4 text-primary" />
-                        Payment Preferences {`(${profileData.paymentPreferences.length}/2)`}
-                      </Label>
-                      {canAddMorePreferences && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={addPaymentPreference}
-                          className="flex items-center gap-2"
-                        >
-                          <Plus className="h-4 w-4" />
-                          Add Preference
-                        </Button>
-                      )}
-                    </div>
+                  <motion.div variants={itemVariants} className="space-y-6">
+                    <Label className="text-base font-semibold flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-primary" />
+                      Payment Preferences
+                    </Label>
 
+                    {/* Primary Preference */}
                     <div className="space-y-4">
+                      <h4 className="font-medium text-sm text-muted-foreground">Primary Preference</h4>
                       {profileData.paymentPreferences.map((pref, index) => (
                         <div key={index} className="p-4 border rounded-lg bg-white/50 space-y-4">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium text-sm">
-                              {index === 0 ? "Primary Preference" : "Secondary Preference"}
-                            </span>
-                            {profileData.paymentPreferences.length > 1 && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removePaymentPreference(index)}
-                                className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
 
                           <div className="grid md:grid-cols-2 gap-4">
                             <div className="space-y-2">
@@ -508,6 +514,96 @@ const Profile = () => {
                               <Select 
                                 value={pref.token} 
                                 onValueChange={(value) => updatePaymentPreference(index, 'token', value)}
+                              >
+                                <SelectTrigger className="glass-card border-white/20">
+                                  <SelectValue placeholder="Select token" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="usdc">USDC</SelectItem>
+                                  <SelectItem value="usdt">USDT</SelectItem>
+                                  <SelectItem value="eth">ETH</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Secondary Preference */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-sm text-muted-foreground">Secondary Preference (Optional)</h4>
+                        {profileData.secondaryPreferences.length === 0 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setProfileData(prev => ({
+                              ...prev,
+                              secondaryPreferences: [{ chain: "", token: "" }]
+                            }))}
+                            className="flex items-center gap-2"
+                          >
+                            <Plus className="h-4 w-4" />
+                            Add Secondary
+                          </Button>
+                        )}
+                      </div>
+
+                      {profileData.secondaryPreferences.map((pref, index) => (
+                        <div key={index} className="p-4 border rounded-lg bg-white/50 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-sm">Secondary Preference</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setProfileData(prev => ({
+                                ...prev,
+                                secondaryPreferences: []
+                              }))}
+                              className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+
+                          <div className="grid md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label className="text-sm">Chain</Label>
+                              <Select 
+                                value={pref.chain} 
+                                onValueChange={(value) => setProfileData(prev => ({
+                                  ...prev,
+                                  secondaryPreferences: prev.secondaryPreferences.map((p, i) => 
+                                    i === index ? { ...p, chain: value } : p
+                                  )
+                                }))}
+                              >
+                                <SelectTrigger className="glass-card border-white/20">
+                                  <SelectValue placeholder="Select chain" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="ethereum">Sepolia</SelectItem>
+                                  <SelectItem value="polygon">Amoy</SelectItem>
+                                  <SelectItem value="arbitrum">Arbitrum Sepolia</SelectItem>
+                                  <SelectItem value="optimism">Op Sepolia</SelectItem>
+                                  <SelectItem value="base">Base Sepolia</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label className="text-sm">Token</Label>
+                              <Select 
+                                value={pref.token} 
+                                onValueChange={(value) => setProfileData(prev => ({
+                                  ...prev,
+                                  secondaryPreferences: prev.secondaryPreferences.map((p, i) => 
+                                    i === index ? { ...p, token: value } : p
+                                  )
+                                }))}
                               >
                                 <SelectTrigger className="glass-card border-white/20">
                                   <SelectValue placeholder="Select token" />

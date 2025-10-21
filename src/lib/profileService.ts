@@ -121,7 +121,9 @@ export class ProfileService {
             .from('wallets')
             .update({
               chain: profileData.preferred_chain || existingWallet.chain || 'ethereum',
-              token: profileData.preferred_token || existingWallet.token || 'usdc'
+              token: profileData.preferred_token || existingWallet.token || 'usdc',
+              secondary_chain_preference: profileData.secondary_chain || existingWallet.secondary_chain_preference || null,
+              secondary_token_preference: profileData.secondary_token || existingWallet.secondary_token_preference || null
             })
             .eq('id', existingWallet.id)
             .select()
@@ -138,6 +140,8 @@ export class ProfileService {
               employee_id: employeeId,
               chain: profileData.preferred_chain || 'ethereum',
               token: profileData.preferred_token || 'usdc',
+              secondary_chain_preference: profileData.secondary_chain || null,
+              secondary_token_preference: profileData.secondary_token || null,
               account_address: profileData.wallet_address,
               is_default: true
             })
@@ -184,6 +188,8 @@ export class ProfileService {
               employee_id: employeeId,
               chain: profileData.preferred_chain || 'ethereum',
               token: profileData.preferred_token || 'usdc',
+              secondary_chain_preference: profileData.secondary_chain || null,
+              secondary_token_preference: profileData.secondary_token || null,
               account_address: '', // Empty address - can be filled later
               is_default: true
             })
@@ -663,6 +669,8 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
                 account_address,
                 chain,
                 token,
+                secondary_chain_preference,
+                secondary_token_preference,
                 is_default
               )
             `)
@@ -684,6 +692,8 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
                 account_address,
                 chain,
                 token,
+                secondary_chain_preference,
+                secondary_token_preference,
                 is_default
               )
             `)
@@ -709,7 +719,9 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
             email: employee.email || '', // Handle null emails
             wallet_address: employee.wallets?.[0]?.account_address || '',
             chain: employee.wallets?.[0]?.chain || '',
-            token: employee.wallets?.[0]?.token || ''
+            token: employee.wallets?.[0]?.token || '',
+            secondary_chain: employee.wallets?.[0]?.secondary_chain_preference || '',
+            secondary_token: employee.wallets?.[0]?.secondary_token_preference || ''
           })) || []
         };
       }
@@ -784,6 +796,8 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
             account_address,
             chain,
             token,
+            secondary_chain_preference,
+            secondary_token_preference,
             is_default
           )
         `)
@@ -814,6 +828,8 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
           wallet_address: wallet?.account_address || '',
           chain: employment.chain || wallet?.chain || 'ethereum',
           token: employment.token || wallet?.token || 'usdc',
+          secondary_chain: wallet?.secondary_chain_preference || employment.secondary_chain_preference || null,
+          secondary_token: wallet?.secondary_token_preference || employment.secondary_token_preference || null,
           payment_amount: employment.payment_amount || 0,
           payment_frequency: employment.payment_frequency || 'monthly',
           status: employment.status,
@@ -973,8 +989,14 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
       wallet_address: string;
       chain: string;
       token: string;
+      secondary_chain?: string;
+      secondary_token?: string;
       payment: string;
     }>;
+    payment_frequency?: string;
+    payment_start_date?: string;
+    payment_end_date?: string;
+    payment_day_of_week?: string;
   }) {
     try {
       console.log('Creating payment group:', groupData);
@@ -1061,11 +1083,14 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
           status: 'active',
           role: 'employee',
           payment_amount: (parseFloat(employee.payment) || 0).toString(),
-          payment_frequency: 'monthly', // Default frequency, can be made dynamic
+          payment_frequency: groupData.payment_frequency || 'monthly',
+          payment_start_date: groupData.payment_start_date || null,
+          payment_end_date: groupData.payment_end_date || null,
+          payment_day_of_week: groupData.payment_day_of_week || null,
           chain: employee.chain || 'ethereum',
           token: employee.token || 'usdc',
-          token_contract: '',
-          token_decimals: 18,
+          secondary_chain_preference: employee.secondary_chain || null, // Secondary chain preference
+          secondary_token_preference: employee.secondary_token || null, // Secondary token preference
           updated_at: new Date().toISOString()
         };
 
@@ -1116,7 +1141,9 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
               .update({ 
                 employment_id: employment.id,
                 chain: employee.chain || existingWallet.chain || 'ethereum',
-                token: employee.token || existingWallet.token || 'usdc'
+                token: employee.token || existingWallet.token || 'usdc',
+                secondary_chain_preference: employee.secondary_chain || existingWallet.secondary_chain_preference || null,
+                secondary_token_preference: employee.secondary_token || existingWallet.secondary_token_preference || null
               })
               .eq('id', existingWallet.id);
 
@@ -1126,17 +1153,19 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
               console.log('Updated existing wallet and linked to employment:', existingWallet.id);
             }
           } else {
-            // Create new wallet entry linked to employment
-            const { error: createError } = await supabase
-              .from('wallets')
-              .insert({
-                employee_id: employment.employee_id,
-                employment_id: employment.id,
-                chain: employee.chain || 'ethereum',
-                token: employee.token || 'usdc',
-                account_address: employee.wallet_address,
-                is_default: true
-              });
+          // Create new wallet entry linked to employment
+          const { error: createError } = await supabase
+            .from('wallets')
+            .insert({
+              employee_id: employment.employee_id,
+              employment_id: employment.id,
+              chain: employee.chain || 'ethereum',
+              token: employee.token || 'usdc',
+              secondary_chain_preference: employee.secondary_chain || null,
+              secondary_token_preference: employee.secondary_token || null,
+              account_address: employee.wallet_address,
+              is_default: true
+            });
 
             if (createError) {
               console.error('Error creating wallet:', createError);
@@ -1206,6 +1235,8 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
       wallet_address: string;
       chain: string;
       token: string;
+      secondary_chain?: string;
+      secondary_token?: string;
       payment: string;
     };
   }) {
@@ -1271,8 +1302,8 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
         payment_frequency: 'monthly', // Default frequency
         chain: data.employeeData.chain || 'ethereum',
         token: data.employeeData.token || 'usdc',
-        token_contract: '',
-        token_decimals: 18,
+        secondary_chain_preference: data.employeeData.secondary_chain || null,
+        secondary_token_preference: data.employeeData.secondary_token || null,
         updated_at: new Date().toISOString()
       };
 
@@ -1316,7 +1347,9 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
             .update({
               employment_id: employment.id,
               chain: data.employeeData.chain || existingWallet.chain || 'ethereum',
-              token: data.employeeData.token || existingWallet.token || 'usdc'
+              token: data.employeeData.token || existingWallet.token || 'usdc',
+              secondary_chain_preference: data.employeeData.secondary_chain || existingWallet.secondary_chain_preference || null,
+              secondary_token_preference: data.employeeData.secondary_token || existingWallet.secondary_token_preference || null
             })
             .eq('id', existingWallet.id);
 
@@ -1335,6 +1368,8 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
               employment_id: employment.id,
               chain: data.employeeData.chain || 'ethereum',
               token: data.employeeData.token || 'usdc',
+              secondary_chain_preference: data.employeeData.secondary_chain || null,
+              secondary_token_preference: data.employeeData.secondary_token || null,
               account_address: data.employeeData.wallet_address,
               is_default: true
             });

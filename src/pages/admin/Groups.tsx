@@ -253,19 +253,31 @@ const Groups = () => {
           chain: primaryResult.data.chain || 'ethereum',
           token: primaryResult.data.token || 'usdc'
         });
+        
+        // Add secondary preference if available
+        if (primaryResult.data.secondary_chain_preference && primaryResult.data.secondary_token_preference) {
+          preferences.push({
+            chain: primaryResult.data.secondary_chain_preference,
+            token: primaryResult.data.secondary_token_preference
+          });
+        } else {
+          // Fallback to default secondary preference
+          preferences.push({
+            chain: 'base-sepolia',
+            token: 'usdc'
+          });
+        }
       } else {
-        // Fallback to default primary preference
+        // Fallback to default preferences
         preferences.push({
           chain: 'ethereum',
           token: 'usdc'
         });
+        preferences.push({
+          chain: 'base-sepolia',
+          token: 'usdc'
+        });
       }
-      
-      // Add secondary preference - always Base Sepolia USDC
-      preferences.push({
-        chain: 'base-sepolia',
-        token: 'usdc'
-      });
       
       return preferences;
     } catch (error) {

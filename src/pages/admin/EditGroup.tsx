@@ -22,6 +22,8 @@ interface Employee {
   wallet_address: string;
   chain: string;
   token: string;
+  secondary_chain?: string;
+  secondary_token?: string;
   payment_amount: string; // Changed to string for decimal precision
   payment_frequency: string;
   status: string;
@@ -90,7 +92,9 @@ const EditGroup = () => {
     name: "", 
     payment: "", 
     chain: "", 
-    token: "" 
+    token: "",
+    secondary_chain: "",
+    secondary_token: ""
   });
   
   // Payment schedule state
@@ -368,6 +372,8 @@ const EditGroup = () => {
             wallet_address: newEmployee.address,
             chain: newEmployee.chain,
             token: newEmployee.token,
+            secondary_chain: newEmployee.secondary_chain,
+            secondary_token: newEmployee.secondary_token,
             payment: newEmployee.payment
           }
         });
@@ -380,7 +386,7 @@ const EditGroup = () => {
             setGroupData(groupResult.data);
           }
 
-          setNewEmployee({ address: "", name: "", payment: "", chain: "", token: "" });
+          setNewEmployee({ address: "", name: "", payment: "", chain: "", token: "", secondary_chain: "", secondary_token: "" });
           toast({
             title: "Employee Added",
             description: `${newEmployee.name} has been added to the group.`,
@@ -723,15 +729,29 @@ const EditGroup = () => {
                 </div>
                 <div className="grid md:grid-cols-2 gap-4 mt-4">
                   <Input
-                    placeholder="Chain (e.g., ethereum)"
+                    placeholder="Primary Chain (e.g., ethereum)"
                     value={newEmployee.chain}
                     onChange={(e) => setNewEmployee({ ...newEmployee, chain: e.target.value })}
                     className="glass-card border-white/20"
                   />
                   <Input
-                    placeholder="Token (e.g., usdc)"
+                    placeholder="Primary Token (e.g., usdc)"
                     value={newEmployee.token}
                     onChange={(e) => setNewEmployee({ ...newEmployee, token: e.target.value })}
+                    className="glass-card border-white/20"
+                  />
+                </div>
+                <div className="grid md:grid-cols-2 gap-4 mt-4">
+                  <Input
+                    placeholder="Secondary Chain (optional)"
+                    value={newEmployee.secondary_chain}
+                    onChange={(e) => setNewEmployee({ ...newEmployee, secondary_chain: e.target.value })}
+                    className="glass-card border-white/20"
+                  />
+                  <Input
+                    placeholder="Secondary Token (optional)"
+                    value={newEmployee.secondary_token}
+                    onChange={(e) => setNewEmployee({ ...newEmployee, secondary_token: e.target.value })}
                     className="glass-card border-white/20"
                   />
                 </div>
@@ -778,7 +798,7 @@ const EditGroup = () => {
                     className="glass-card p-4 hover-lift"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="flex-1 grid grid-cols-4 gap-4">
+                      <div className="flex-1 grid grid-cols-5 gap-4">
                         <div>
                           <div className="text-xs text-muted-foreground mb-1">Address</div>
                           <div className="font-mono text-sm truncate" title={emp.wallet_address}>
@@ -793,8 +813,17 @@ const EditGroup = () => {
                           )}
                         </div>
                         <div>
-                          <div className="text-xs text-muted-foreground mb-1">Chain/Token</div>
+                          <div className="text-xs text-muted-foreground mb-1">Primary Chain/Token</div>
                           <div className="text-sm">{emp.chain} • {emp.token}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted-foreground mb-1">Secondary Chain/Token</div>
+                          <div className="text-sm">
+                            {emp.secondary_chain && emp.secondary_token 
+                              ? `${emp.secondary_chain} • ${emp.secondary_token}` 
+                              : 'Not set'
+                            }
+                          </div>
                         </div>
                         <div>
                           <div className="text-xs text-muted-foreground mb-1">Payment</div>
