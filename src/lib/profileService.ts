@@ -1209,6 +1209,18 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
   // Remove employee from group (delete employment)
   static async removeEmployeeFromGroup(employmentId: string) {
     try {
+      // First, unlink any wallets from this employment (set employment_id to NULL)
+      const { error: walletError } = await supabase
+        .from('wallets')
+        .update({ employment_id: null })
+        .eq('employment_id', employmentId);
+
+      if (walletError) {
+        console.error('Error unlinking wallets from employment:', walletError);
+        // Continue with employment deletion even if wallet unlinking fails
+      }
+
+      // Then delete the employment record
       const { error } = await supabase
         .from('employments')
         .delete()
