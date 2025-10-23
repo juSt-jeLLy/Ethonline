@@ -24,14 +24,18 @@ This statement led me to believe that if I only had **ETH** on the source chain 
 ---
 
 **Example Code Used:**
-`typescript
+```bash
+
+typescript
 const result: TransferResult = await sdk.transfer({
   token: 'USDC', // Convert selected tokens to USDC
   amount: 100,
   chainId: 84532, // Base Sepolia
   recipient: '0x...',
-  sourceChains: [11155111], // Sepolia
-});`
+  sourceChains: [11155111], //only uses ETH from Sepolia
+});
+```
+
 Expected Behavior (Based on Docs):
 
 The SDK would use ETH from Sepolia (since that’s what the sender holds).
