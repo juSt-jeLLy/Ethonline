@@ -448,18 +448,36 @@ const CreateGroup = () => {
                   />
                 </div>
                 <div className="grid md:grid-cols-2 gap-4 mt-4">
-                  <Input
-                    placeholder="Chain (e.g., ethereum)"
-                    value={newEmployee.chain}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, chain: e.target.value })}
-                    className="glass-card border-white/20"
-                  />
-                  <Input
-                    placeholder="Token (e.g., usdc)"
-                    value={newEmployee.token}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, token: e.target.value })}
-                    className="glass-card border-white/20"
-                  />
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Primary Chain</Label>
+                    <Select value={newEmployee.chain} onValueChange={(value) => setNewEmployee({ ...newEmployee, chain: value })}>
+                      <SelectTrigger className="glass-card border-white/20">
+                        <SelectValue placeholder="Select chain" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ethereum">Ethereum</SelectItem>
+                        <SelectItem value="optimism">Optimism</SelectItem>
+                        <SelectItem value="polygon">Polygon</SelectItem>
+                        <SelectItem value="arbitrum">Arbitrum</SelectItem>
+                        <SelectItem value="base">Base</SelectItem>
+                        <SelectItem value="solana">Solana</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Primary Token</Label>
+                    <Select value={newEmployee.token} onValueChange={(value) => setNewEmployee({ ...newEmployee, token: value })}>
+                      <SelectTrigger className="glass-card border-white/20">
+                        <SelectValue placeholder="Select token" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="usdc">USDC</SelectItem>
+                        <SelectItem value="usdt">USDT</SelectItem>
+                        <SelectItem value="eth">ETH</SelectItem>
+                        <SelectItem value="pyusd">PYUSD</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <Button

@@ -11,6 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import { ProfileService } from "@/lib/profileService";
 import { useAccount } from "wagmi";
 
+const appNetwork = import.meta.env.VITE_APP_NETWORK || "mainnet"; // Default to mainnet
+
 const Profile = () => {
   const { toast } = useToast();
   const { address, isConnected } = useAccount();
@@ -281,11 +283,25 @@ const Profile = () => {
                         <SelectValue placeholder="Select chain" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="ethereum">Sepolia</SelectItem>
-                        <SelectItem value="polygon">Amoy</SelectItem>
-                        <SelectItem value="arbitrum">Arbitrum Sepolia</SelectItem>
-                        <SelectItem value="optimism">Op Sepolia</SelectItem>
-                        <SelectItem value="base">Base Sepolia</SelectItem>
+                        {appNetwork === "testnet" ? (
+                          <>
+                            <SelectItem value="ethereum">Sepolia</SelectItem>
+                            <SelectItem value="polygon">Amoy</SelectItem>
+                            <SelectItem value="arbitrum">Arbitrum Sepolia</SelectItem>
+                            <SelectItem value="optimism">Op Sepolia</SelectItem>
+                            <SelectItem value="base">Base Sepolia</SelectItem>
+                            <SelectItem value="solana">Solana</SelectItem>
+                          </>
+                        ) : (
+                          <>
+                            <SelectItem value="ethereum">Ethereum Mainnet</SelectItem>
+                            <SelectItem value="polygon">Polygon Mainnet</SelectItem>
+                            <SelectItem value="arbitrum">Arbitrum Mainnet</SelectItem>
+                            <SelectItem value="optimism">Optimism Mainnet</SelectItem>
+                            <SelectItem value="base">Base Mainnet</SelectItem>
+                            <SelectItem value="solana">Solana</SelectItem>
+                          </>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -303,7 +319,7 @@ const Profile = () => {
                         <SelectItem value="usdc">USDC</SelectItem>
                         <SelectItem value="usdt">USDT</SelectItem>
                         <SelectItem value="eth">ETH</SelectItem>
-                        <SelectItem value="pyusd">PYUSD (Sepolia)</SelectItem>
+                        <SelectItem value="pyusd">PYUSD</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

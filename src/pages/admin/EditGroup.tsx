@@ -594,6 +594,7 @@ const EditGroup = () => {
                           <SelectItem value="arbitrum">Arbitrum Sepolia</SelectItem>
                           <SelectItem value="optimism">Op Sepolia</SelectItem>
                           <SelectItem value="base">Base Sepolia</SelectItem>
+                          <SelectItem value="solana">Solana</SelectItem>
                         </>
                       ) : (
                         <>
@@ -602,6 +603,7 @@ const EditGroup = () => {
                           <SelectItem value="arbitrum">Arbitrum Mainnet</SelectItem>
                           <SelectItem value="optimism">Optimism Mainnet</SelectItem>
                           <SelectItem value="base">Base Mainnet</SelectItem>
+                          <SelectItem value="solana">Solana</SelectItem>
                         </>
                       )}
                     </SelectContent>

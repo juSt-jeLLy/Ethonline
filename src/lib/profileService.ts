@@ -529,8 +529,8 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
     payment_frequency?: number
     chain?: string
     token?: string
-    token_contract?: string
-    token_decimals?: number
+    secondary_chain_preference?: string
+    secondary_token_preference?: string
   }) {
     try {
       // Create employment relationship
@@ -545,8 +545,8 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
           payment_frequency: employmentData.payment_frequency,
           chain: employmentData.chain,
           token: employmentData.token,
-          token_contract: employmentData.token_contract,
-          token_decimals: employmentData.token_decimals,
+          secondary_chain_preference: employmentData.secondary_chain_preference,
+          secondary_token_preference: employmentData.secondary_token_preference,
         }, {
           onConflict: 'employer_id,employee_id'
         })
@@ -1059,8 +1059,8 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
           payment_frequency: 'monthly', // Default frequency, can be made dynamic
           chain: employee.chain || 'ethereum',
           token: employee.token || 'usdc',
-          token_contract: '',
-          token_decimals: 18,
+          secondary_chain_preference: '',
+          secondary_token_preference: '',
         };
 
         employmentRecords.push(employmentRecord);
@@ -1264,8 +1264,8 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
         payment_frequency: 'monthly', // Default frequency
         chain: data.employeeData.chain || 'ethereum',
         token: data.employeeData.token || 'usdc',
-        token_contract: '',
-        token_decimals: 18,
+        secondary_chain_preference: '',
+        secondary_token_preference: '',
       };
 
       console.log('Creating employment record:', employmentRecord);
@@ -1815,32 +1815,36 @@ static async getEmployeeWalletData(employeeId: string, employmentId?: string) {
     employee_id: string;
     chain: string;
     token: string;
-    token_contract?: string;
-    token_decimals?: number;
     amount_token: string;
     recipient: string;
     tx_hash?: string;
     status?: 'pending' | 'confirmed' | 'failed';
     period_start?: string;
     period_end?: string;
+    intent_id?: string;
   }) {
     try {
       const { data, error } = await supabase
         .from('payments')
         .insert({
-          employment_id: paymentData.employment_id,
-          employer_id: paymentData.employer_id,
-          employee_id: paymentData.employee_id,
-          chain: paymentData.chain,
-          token: paymentData.token,
-          token_contract: paymentData.token_contract,
-          token_decimals: paymentData.token_decimals,
-          amount_token: paymentData.amount_token,
-          recipient: paymentData.recipient,
-          tx_hash: paymentData.tx_hash,
+          employment_id: paymentData.employment_id || null,
+          employer_id: paymentData.employer_id || null,
+          employee_id: paymentData.employee_id || null,
+          chain: paymentData.chain || null,
+          token: paymentData.token || null,
+          token_contract: null, // LayerZero transfers don't use token contracts
+          token_decimals: null, // LayerZero transfers don't use token decimals
+          amount_token: paymentData.amount_token || null,
+          recipient: paymentData.recipient || null,
+          tx_hash: paymentData.tx_hash || null,
           status: paymentData.status || 'pending',
-          period_start: paymentData.period_start,
-          period_end: paymentData.period_end,
+          period_start: paymentData.period_start || null,
+          period_end: paymentData.period_end || null,
+          intent_id: paymentData.intent_id || 'NA', // Required field
+          first_tx_hash: paymentData.tx_hash || '', // Required field, use tx_hash or empty string
+          deposit_solver_address: null, // LayerZero transfers don't have deposit solvers
+          solver_address: null, // LayerZero transfers don't have solvers
+          solver_to_employer_hash: null, // LayerZero transfers don't have this step
           pay_date: new Date().toISOString().split('T')[0] // Current date in YYYY-MM-DD format
         })
         .select()
