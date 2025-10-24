@@ -689,26 +689,7 @@ export function GroupCard({
               </div>
             </div>
 
-            {/* Balance Warning (only show if NOT using PYUSD mode) */}
-            {!hasEnoughBalance && !payWithPyusd && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-xs font-semibold text-yellow-800">Insufficient Balance</p>
-                    <div className="text-xs text-yellow-700 mt-1">
-                      {Object.entries(balanceCheck.required)
-                        .filter(([_, amount]) => amount > 0)
-                        .map(([token, amount]) => (
-                          <div key={token}>
-                            Need {amount.toFixed(4)} {token} more 
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+         
 
             <div className="flex gap-2 pt-4">
               <Button
