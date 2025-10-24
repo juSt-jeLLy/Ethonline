@@ -2,7 +2,9 @@ import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, DollarSign, Calendar, Edit, Send, Loader2, CheckCircle, XCircle } from "lucide-react";
+import { Building2, Users, DollarSign, Calendar, Edit, Send, Loader2, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { useNexus } from "@/providers/NexusProvider";
+import { useEffect, useState } from "react";
 
 interface Employee {
   id: string;
@@ -59,6 +61,76 @@ export function GroupCard({
     emp.payment_amount && 
     emp.payment_amount > 0
   ) || [];
+
+  const { nexusSDK, isInitialized } = useNexus();
+  const [hasEnoughBalance, setHasEnoughBalance] = useState(true);
+  const [balanceCheck, setBalanceCheck] = useState<{
+    required: Record<string, number>;
+    available: Record<string, number>;
+  }>({ required: {}, available: {} });
+
+  const checkBalances = async () => {
+    if (!nexusSDK || !isInitialized) return;
+    
+    // Calculate base required amounts per token
+    const requiredAmounts = validEmployees.reduce((acc, emp) => {
+      const token = emp.token?.toUpperCase() || '';
+      const amount = parseFloat(emp.payment_amount?.toString() || '0');
+      acc[token] = (acc[token] || 0) + amount;
+      return acc;
+    }, {} as Record<string, number>);
+
+    try {
+      // Get unified balances
+      const balances = await nexusSDK.getUnifiedBalances();
+      
+      // Calculate total available balance per token
+      const availableAmounts = balances?.reduce((acc, token) => {
+        acc[token.symbol] = parseFloat(token.balance);
+        return acc;
+      }, {} as Record<string, number>) || {};
+
+      // Calculate differences and add buffers
+      let sufficient = true;
+      const finalRequiredAmounts: Record<string, number> = {};
+
+      Object.entries(requiredAmounts).forEach(([token, amount]) => {
+        const available = availableAmounts[token] || 0;
+        const difference = Math.max(0, amount - available);
+        
+        // Add buffer to the difference
+        const buffer = token === 'USDC' ? 3 : token === 'ETH' ? 0.001 : 0;
+        const totalNeeded = difference > 0 ? difference + buffer : 0;
+        
+        finalRequiredAmounts[token] = totalNeeded;
+        if (totalNeeded > 0) sufficient = false;
+      });
+
+      // Log the calculations for debugging
+      console.log('Balance Check:', {
+        required: requiredAmounts,
+        available: availableAmounts,
+        difference: finalRequiredAmounts,
+      });
+
+      // Store the amounts
+      setHasEnoughBalance(sufficient);
+      setBalanceCheck({
+        required: finalRequiredAmounts,
+        available: availableAmounts
+      });
+    } catch (error) {
+      console.error('Error checking balances:', error);
+      setHasEnoughBalance(false);
+    }
+  };
+
+  useEffect(() => {
+    // Only run once when component mounts and SDK is initialized
+    if (nexusSDK && isInitialized) {
+      checkBalances();
+    }
+  }, []); // Empty dependency array means it only runs once on mount
 
   return (
     <motion.div
