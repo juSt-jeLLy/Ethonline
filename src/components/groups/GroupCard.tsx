@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Building2, Users, DollarSign, Calendar, Edit, Send, Loader2, CheckCircle, XCircle, AlertCircle, ArrowRightLeft } from "lucide-react";
 import { useNexus } from "@/providers/NexusProvider";
 import { useEffect, useState } from "react";
@@ -79,6 +80,8 @@ export function GroupCard({
     available: Record<string, number>;
   }>({ required: {}, available: {} });
   const [isSwapping, setIsSwapping] = useState(false);
+  const [payWithPyusd, setPayWithPyusd] = useState(false);
+  const [pyusdBalance, setPyusdBalance] = useState(0);
   const [swapProgress, setSwapProgress] = useState<{
     isVisible: boolean;
     fromToken: string;
@@ -118,6 +121,10 @@ export function GroupCard({
         return acc;
       }, {} as Record<string, number>) || {};
 
+      // Find PYUSD balance
+      const pyusdBal = availableAmounts['PYUSD'] || 0;
+      setPyusdBalance(pyusdBal);
+
       // Calculate differences and add buffers
       let sufficient = true;
       const finalRequiredAmounts: Record<string, number> = {};
@@ -139,6 +146,7 @@ export function GroupCard({
         required: requiredAmounts,
         available: availableAmounts,
         difference: finalRequiredAmounts,
+        pyusdBalance: pyusdBal
       });
 
       // Store the amounts
@@ -153,7 +161,7 @@ export function GroupCard({
     }
   };
 
-  const performSwap = async (fromToken: 'ETH' | 'USDC', toToken: 'ETH' | 'USDC', amountNeeded: number) => {
+  const performSwap = async (fromToken: 'ETH' | 'USDC' | 'PYUSD', toToken: 'ETH' | 'USDC' | 'PYUSD', amountNeeded: number) => {
     if (!walletClient) {
       throw new Error('Wallet not connected');
     }
@@ -203,7 +211,60 @@ export function GroupCard({
       let swapAmount;
       let tx;
 
-      if (fromToken === 'ETH' && toToken === 'USDC') {
+      if (fromToken === 'PYUSD' && toToken === 'ETH') {
+        // Calculate how much PYUSD needed to get required ETH
+        // Using the ratio: 2000 USDC/PYUSD = 1 ETH
+        const pyusdNeeded = amountNeeded * 2000; // Convert ETH to PYUSD
+        swapAmount = parseUnits(pyusdNeeded.toString(), 6);
+
+        setSwapProgress(prev => ({
+          ...prev,
+          fromAmount: pyusdNeeded.toFixed(2),
+          status: 'approving',
+          message: `Approving ${pyusdNeeded.toFixed(2)} PYUSD on Sepolia...`
+        }));
+
+        // Approve PYUSD first
+        const pyusdContract = new Contract(CONTRACT_ADDRESSES.PYUSD, ERC20_ABI, signer);
+        const approveTx = await pyusdContract.approve(CONTRACT_ADDRESSES.SWAP, swapAmount);
+        await approveTx.wait();
+
+        setSwapProgress(prev => ({
+          ...prev,
+          status: 'swapping',
+          message: `Swapping ${pyusdNeeded.toFixed(2)} PYUSD for ${amountNeeded.toFixed(6)} ETH on Sepolia...`
+        }));
+
+        // Execute swap: PYUSD -> ETH
+        tx = await swapContract.swapPyusdForEth(swapAmount);
+
+      } else if (fromToken === 'PYUSD' && toToken === 'USDC') {
+        // PYUSD to USDC is 1:1
+        const pyusdNeeded = amountNeeded;
+        swapAmount = parseUnits(pyusdNeeded.toString(), 6);
+
+        setSwapProgress(prev => ({
+          ...prev,
+          fromAmount: pyusdNeeded.toFixed(2),
+          status: 'approving',
+          message: `Approving ${pyusdNeeded.toFixed(2)} PYUSD on Sepolia...`
+        }));
+
+        // Approve PYUSD first
+        const pyusdContract = new Contract(CONTRACT_ADDRESSES.PYUSD, ERC20_ABI, signer);
+        const approveTx = await pyusdContract.approve(CONTRACT_ADDRESSES.SWAP, swapAmount);
+        await approveTx.wait();
+
+        setSwapProgress(prev => ({
+          ...prev,
+          status: 'swapping',
+          message: `Swapping ${pyusdNeeded.toFixed(2)} PYUSD for ${amountNeeded.toFixed(2)} USDC on Sepolia...`
+        }));
+
+        // Execute swap: PYUSD -> USDC
+        tx = await swapContract.swapPyusdForUsdc(swapAmount);
+
+      } else if (fromToken === 'ETH' && toToken === 'USDC') {
         // Calculate how much ETH needed to get required USDC
         // Using the ratio: 2000 USDC = 1 ETH
         const ethNeeded = amountNeeded / 2000; // Convert USDC to ETH
@@ -284,67 +345,87 @@ export function GroupCard({
     setIsSwapping(true);
 
     try {
-      // Determine which token we're short on
-      const shortfalls = Object.entries(balanceCheck.required).filter(([_, amount]) => amount > 0);
-      
-      if (shortfalls.length === 0) {
-        // No shortfall, just pay
-        onPayAll(group);
-        return;
-      }
+      if (payWithPyusd) {
+        // NEW FLOW: Pay with PYUSD
+        console.log('🔄 Starting PYUSD payment flow...');
 
-      if (shortfalls.length > 1) {
-        // Multiple token shortfalls - not supported yet
-        toast({
-          title: "⚠️ Multiple Token Shortfall",
-          description: "Please add more tokens manually. Auto-swap supports single token shortfalls only.",
-          variant: "destructive",
-        });
-        return;
-      }
+        // Calculate total needed for each token (ignoring existing balances)
+        const totalNeeded = validEmployees.reduce((acc, emp) => {
+          const token = emp.token?.toUpperCase() || '';
+          const amount = parseFloat(emp.payment_amount?.toString() || '0');
+          acc[token] = (acc[token] || 0) + amount;
+          return acc;
+        }, {} as Record<string, number>);
 
-      // Single token shortfall
-      const [tokenNeeded, amountNeeded] = shortfalls[0];
-      const tokenNeededUpper = tokenNeeded.toUpperCase() as 'ETH' | 'USDC';
+        console.log('Total amounts needed per token:', totalNeeded);
 
-      // Determine which token to swap from
-      let swapFrom: 'ETH' | 'USDC';
-      if (tokenNeededUpper === 'USDC') {
-        swapFrom = 'ETH';
-        // Check if we have enough ETH to swap
-        const ethNeeded = amountNeeded / 2000;
-        if ((balanceCheck.available['ETH'] || 0) < ethNeeded) {
-          toast({
-            title: "⚠️ Insufficient ETH for Swap",
-            description: `Need ${ethNeeded.toFixed(6)} ETH on Sepolia to swap for ${amountNeeded.toFixed(2)} USDC`,
-            variant: "destructive",
+        // Add buffers
+        const tokensToSwap: Array<{ token: 'ETH' | 'USDC', amount: number }> = [];
+        
+        if (totalNeeded['ETH']) {
+          const buffer = 0.001;
+          tokensToSwap.push({ 
+            token: 'ETH', 
+            amount: totalNeeded['ETH'] + buffer 
           });
-          return;
         }
-      } else {
-        swapFrom = 'USDC';
-        // Check if we have enough USDC to swap
-        const usdcNeeded = amountNeeded * 2000;
-        if ((balanceCheck.available['USDC'] || 0) < usdcNeeded) {
-          toast({
-            title: "⚠️ Insufficient USDC for Swap",
-            description: `Need ${usdcNeeded.toFixed(2)} USDC on Sepolia to swap for ${amountNeeded.toFixed(6)} ETH`,
-            variant: "destructive",
+
+        if (totalNeeded['USDC']) {
+          const buffer = 3;
+          tokensToSwap.push({ 
+            token: 'USDC', 
+            amount: totalNeeded['USDC'] + buffer 
           });
-          return;
         }
-      }
 
-      // Perform the swap on Sepolia
-      const swapSuccess = await performSwap(swapFrom, tokenNeededUpper, amountNeeded);
+        console.log('Tokens to swap from PYUSD:', tokensToSwap);
 
-      if (swapSuccess) {
-        toast({
-          title: "🎉 Swap Successful!",
-          description: `Swapped on Sepolia to get ${amountNeeded.toFixed(4)} ${tokenNeededUpper}. Now processing payments...`,
+        // Calculate total PYUSD needed
+        let totalPyusdNeeded = 0;
+        tokensToSwap.forEach(({ token, amount }) => {
+          if (token === 'ETH') {
+            // ETH: 1 ETH = 2000 PYUSD
+            totalPyusdNeeded += amount * 2000;
+          } else if (token === 'USDC') {
+            // USDC: 1:1 with PYUSD
+            totalPyusdNeeded += amount;
+          }
         });
 
-        // Re-check balances after swap
+        console.log(`Total PYUSD needed: ${totalPyusdNeeded.toFixed(2)}`);
+        console.log(`Available PYUSD: ${pyusdBalance.toFixed(2)}`);
+
+        // Perform all swaps from PYUSD
+        for (const { token, amount } of tokensToSwap) {
+          console.log(`🔄 Swapping PYUSD → ${amount.toFixed(6)} ${token}...`);
+          
+          const swapSuccess = await performSwap('PYUSD', token, amount);
+
+          if (!swapSuccess) {
+            toast({
+              title: "❌ Swap Failed",
+              description: `Failed to swap PYUSD to ${token}`,
+              variant: "destructive",
+            });
+            return;
+          }
+
+          toast({
+            title: "✅ Swap Successful",
+            description: `Swapped PYUSD → ${amount.toFixed(4)} ${token}`,
+          });
+
+          // Small delay between swaps
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
+        // All swaps complete, proceed with payment
+        toast({
+          title: "🎉 All Swaps Complete!",
+          description: "Now processing payments to employees...",
+        });
+
+        // Re-check balances after swaps
         await checkBalances();
 
         // Small delay to ensure balance update
@@ -352,6 +433,77 @@ export function GroupCard({
 
         // Now proceed with payment
         onPayAll(group);
+
+      } else {
+        // ORIGINAL FLOW: Normal swap & pay
+        const shortfalls = Object.entries(balanceCheck.required).filter(([_, amount]) => amount > 0);
+        
+        if (shortfalls.length === 0) {
+          // No shortfall, just pay
+          onPayAll(group);
+          return;
+        }
+
+        if (shortfalls.length > 1) {
+          // Multiple token shortfalls - not supported yet
+          toast({
+            title: "⚠️ Multiple Token Shortfall",
+            description: "Please add more tokens manually. Auto-swap supports single token shortfalls only.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Single token shortfall
+        const [tokenNeeded, amountNeeded] = shortfalls[0];
+        const tokenNeededUpper = tokenNeeded.toUpperCase() as 'ETH' | 'USDC';
+
+        // Determine which token to swap from
+        let swapFrom: 'ETH' | 'USDC';
+        if (tokenNeededUpper === 'USDC') {
+          swapFrom = 'ETH';
+          // Check if we have enough ETH to swap
+          const ethNeeded = amountNeeded / 2000;
+          if ((balanceCheck.available['ETH'] || 0) < ethNeeded) {
+            toast({
+              title: "⚠️ Insufficient ETH for Swap",
+              description: `Need ${ethNeeded.toFixed(6)} ETH on Sepolia to swap for ${amountNeeded.toFixed(2)} USDC`,
+              variant: "destructive",
+            });
+            return;
+          }
+        } else {
+          swapFrom = 'USDC';
+          // Check if we have enough USDC to swap
+          const usdcNeeded = amountNeeded * 2000;
+          if ((balanceCheck.available['USDC'] || 0) < usdcNeeded) {
+            toast({
+              title: "⚠️ Insufficient USDC for Swap",
+              description: `Need ${usdcNeeded.toFixed(2)} USDC on Sepolia to swap for ${amountNeeded.toFixed(6)} ETH`,
+              variant: "destructive",
+            });
+            return;
+          }
+        }
+
+        // Perform the swap on Sepolia
+        const swapSuccess = await performSwap(swapFrom, tokenNeededUpper, amountNeeded);
+
+        if (swapSuccess) {
+          toast({
+            title: "🎉 Swap Successful!",
+            description: `Swapped on Sepolia to get ${amountNeeded.toFixed(4)} ${tokenNeededUpper}. Now processing payments...`,
+          });
+
+          // Re-check balances after swap
+          await checkBalances();
+
+          // Small delay to ensure balance update
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          // Now proceed with payment
+          onPayAll(group);
+        }
       }
 
     } catch (error: any) {
@@ -398,6 +550,33 @@ export function GroupCard({
         icon: <Send className="mr-2 h-4 w-4" />,
         disabled: true,
         onClick: () => {}
+      };
+    }
+
+    if (payWithPyusd) {
+      // PYUSD payment mode - always enabled regardless of balance
+      const totalNeeded = validEmployees.reduce((acc, emp) => {
+        const token = emp.token?.toUpperCase() || '';
+        const amount = parseFloat(emp.payment_amount?.toString() || '0');
+        acc[token] = (acc[token] || 0) + amount;
+        return acc;
+      }, {} as Record<string, number>);
+
+      // Calculate total PYUSD needed
+      let totalPyusdNeeded = 0;
+      if (totalNeeded['ETH']) {
+        totalPyusdNeeded += (totalNeeded['ETH'] + 0.001) * 2000;
+      }
+      if (totalNeeded['USDC']) {
+        totalPyusdNeeded += totalNeeded['USDC'] + 3;
+      }
+
+      return {
+        text: 'Swap & Pay',
+        icon: <ArrowRightLeft className="mr-2 h-4 w-4" />,
+        disabled: false,
+        onClick: handleSwapAndPay,
+        subtitle: `Using ${totalPyusdNeeded.toFixed(2)} PYUSD`
       };
     }
 
@@ -488,8 +667,30 @@ export function GroupCard({
               </div>
             </div>
 
-            {/* Balance Warning */}
-            {!hasEnoughBalance && (
+            {/* Pay with PYUSD Toggle */}
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <img
+                    src="https://assets.coingecko.com/coins/images/31212/small/PYUSD_Logo_%282%29.png"
+                    alt="PYUSD"
+                    className="w-5 h-5 rounded-full"
+                  />
+                  <div>
+                    <p className="text-xs font-semibold text-purple-800">Pay with PYUSD</p>
+                   
+                  </div>
+                </div>
+                <Switch
+                  checked={payWithPyusd}
+                  onCheckedChange={setPayWithPyusd}
+                  // Removed the disabled prop to allow toggle regardless of balance
+                />
+              </div>
+            </div>
+
+            {/* Balance Warning (only show if NOT using PYUSD mode) */}
+            {!hasEnoughBalance && !payWithPyusd && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                 <div className="flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5" />
