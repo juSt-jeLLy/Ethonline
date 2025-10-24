@@ -90,6 +90,8 @@ export function GroupCard({
     toAmount: string;
     status: 'switching' | 'calculating' | 'approving' | 'swapping' | 'complete' | 'error';
     message: string;
+    currentSwap: number;
+    totalSwaps: number;
   }>({
     isVisible: false,
     fromToken: '',
@@ -97,7 +99,9 @@ export function GroupCard({
     fromAmount: '',
     toAmount: '',
     status: 'calculating',
-    message: ''
+    message: '',
+    currentSwap: 0,
+    totalSwaps: 0
   });
 
   const checkBalances = async () => {
@@ -161,25 +165,30 @@ export function GroupCard({
     }
   };
 
-  const performSwap = async (fromToken: 'ETH' | 'USDC' | 'PYUSD', toToken: 'ETH' | 'USDC' | 'PYUSD', amountNeeded: number) => {
+  const performSwap = async (fromToken: 'ETH' | 'USDC' | 'PYUSD', toToken: 'ETH' | 'USDC' | 'PYUSD', amountNeeded: number, currentSwap: number = 1, totalSwaps: number = 1) => {
     if (!walletClient) {
       throw new Error('Wallet not connected');
     }
 
     try {
+      // Show swap progress immediately
+      setSwapProgress({
+        isVisible: true,
+        fromToken,
+        toToken,
+        fromAmount: '0',
+        toAmount: amountNeeded.toFixed(6),
+        status: 'switching',
+        message: totalSwaps > 1 ? 
+          `Starting swap ${currentSwap} of ${totalSwaps}: Switching to Sepolia network...` :
+          `Switching to Sepolia network...`,
+        currentSwap,
+        totalSwaps
+      });
+
       // Step 1: Check current chain and switch to Sepolia if needed
       const currentChainId = await walletClient.getChainId();
       if (currentChainId !== sepolia.id) {
-        setSwapProgress({
-          isVisible: true,
-          fromToken,
-          toToken,
-          fromAmount: '0',
-          toAmount: amountNeeded.toFixed(6),
-          status: 'switching',
-          message: `Switching to Sepolia network...`
-        });
-
         try {
           await switchChainAsync({ chainId: sepolia.id });
           
@@ -205,7 +214,9 @@ export function GroupCard({
       setSwapProgress(prev => ({
         ...prev,
         status: 'calculating',
-        message: `Calculating swap amount for ${amountNeeded.toFixed(4)} ${toToken}...`
+        message: totalSwaps > 1 ? 
+          `Swap ${currentSwap} of ${totalSwaps}: Calculating swap amount for ${amountNeeded.toFixed(4)} ${toToken}...` :
+          `Calculating swap amount for ${amountNeeded.toFixed(4)} ${toToken}...`
       }));
 
       let swapAmount;
@@ -221,7 +232,9 @@ export function GroupCard({
           ...prev,
           fromAmount: pyusdNeeded.toFixed(2),
           status: 'approving',
-          message: `Approving ${pyusdNeeded.toFixed(2)} PYUSD on Sepolia...`
+          message: totalSwaps > 1 ? 
+            `Swap ${currentSwap} of ${totalSwaps}: Approving ${pyusdNeeded.toFixed(2)} PYUSD on Sepolia...` :
+            `Approving ${pyusdNeeded.toFixed(2)} PYUSD on Sepolia...`
         }));
 
         // Approve PYUSD first
@@ -232,7 +245,9 @@ export function GroupCard({
         setSwapProgress(prev => ({
           ...prev,
           status: 'swapping',
-          message: `Swapping ${pyusdNeeded.toFixed(2)} PYUSD for ${amountNeeded.toFixed(6)} ETH on Sepolia...`
+          message: totalSwaps > 1 ? 
+            `Swap ${currentSwap} of ${totalSwaps}: Swapping ${pyusdNeeded.toFixed(2)} PYUSD for ${amountNeeded.toFixed(6)} ETH on Sepolia...` :
+            `Swapping ${pyusdNeeded.toFixed(2)} PYUSD for ${amountNeeded.toFixed(6)} ETH on Sepolia...`
         }));
 
         // Execute swap: PYUSD -> ETH
@@ -247,7 +262,9 @@ export function GroupCard({
           ...prev,
           fromAmount: pyusdNeeded.toFixed(2),
           status: 'approving',
-          message: `Approving ${pyusdNeeded.toFixed(2)} PYUSD on Sepolia...`
+          message: totalSwaps > 1 ? 
+            `Swap ${currentSwap} of ${totalSwaps}: Approving ${pyusdNeeded.toFixed(2)} PYUSD on Sepolia...` :
+            `Approving ${pyusdNeeded.toFixed(2)} PYUSD on Sepolia...`
         }));
 
         // Approve PYUSD first
@@ -258,7 +275,9 @@ export function GroupCard({
         setSwapProgress(prev => ({
           ...prev,
           status: 'swapping',
-          message: `Swapping ${pyusdNeeded.toFixed(2)} PYUSD for ${amountNeeded.toFixed(2)} USDC on Sepolia...`
+          message: totalSwaps > 1 ? 
+            `Swap ${currentSwap} of ${totalSwaps}: Swapping ${pyusdNeeded.toFixed(2)} PYUSD for ${amountNeeded.toFixed(2)} USDC on Sepolia...` :
+            `Swapping ${pyusdNeeded.toFixed(2)} PYUSD for ${amountNeeded.toFixed(2)} USDC on Sepolia...`
         }));
 
         // Execute swap: PYUSD -> USDC
@@ -274,7 +293,9 @@ export function GroupCard({
           ...prev,
           fromAmount: ethNeeded.toFixed(6),
           status: 'swapping',
-          message: `Swapping ${ethNeeded.toFixed(6)} ETH for ${amountNeeded.toFixed(2)} USDC on Sepolia...`
+          message: totalSwaps > 1 ? 
+            `Swap ${currentSwap} of ${totalSwaps}: Swapping ${ethNeeded.toFixed(6)} ETH for ${amountNeeded.toFixed(2)} USDC on Sepolia...` :
+            `Swapping ${ethNeeded.toFixed(6)} ETH for ${amountNeeded.toFixed(2)} USDC on Sepolia...`
         }));
 
         // Execute swap: ETH -> USDC
@@ -290,7 +311,9 @@ export function GroupCard({
           ...prev,
           fromAmount: usdcNeeded.toFixed(2),
           status: 'approving',
-          message: `Approving ${usdcNeeded.toFixed(2)} USDC on Sepolia...`
+          message: totalSwaps > 1 ? 
+            `Swap ${currentSwap} of ${totalSwaps}: Approving ${usdcNeeded.toFixed(2)} USDC on Sepolia...` :
+            `Approving ${usdcNeeded.toFixed(2)} USDC on Sepolia...`
         }));
 
         // Approve USDC first
@@ -301,7 +324,9 @@ export function GroupCard({
         setSwapProgress(prev => ({
           ...prev,
           status: 'swapping',
-          message: `Swapping ${usdcNeeded.toFixed(2)} USDC for ${amountNeeded.toFixed(6)} ETH on Sepolia...`
+          message: totalSwaps > 1 ? 
+            `Swap ${currentSwap} of ${totalSwaps}: Swapping ${usdcNeeded.toFixed(2)} USDC for ${amountNeeded.toFixed(6)} ETH on Sepolia...` :
+            `Swapping ${usdcNeeded.toFixed(2)} USDC for ${amountNeeded.toFixed(6)} ETH on Sepolia...`
         }));
 
         // Execute swap: USDC -> ETH
@@ -314,7 +339,9 @@ export function GroupCard({
         setSwapProgress(prev => ({
           ...prev,
           status: 'complete',
-          message: `✅ Swap successful on Sepolia! Got ${amountNeeded.toFixed(4)} ${toToken}`
+          message: totalSwaps > 1 ? 
+            `✅ Swap ${currentSwap} of ${totalSwaps} successful on Sepolia! Got ${amountNeeded.toFixed(4)} ${toToken}` :
+            `✅ Swap successful on Sepolia! Got ${amountNeeded.toFixed(4)} ${toToken}`
         }));
 
         // Wait a bit to show success message
@@ -329,7 +356,9 @@ export function GroupCard({
       setSwapProgress(prev => ({
         ...prev,
         status: 'error',
-        message: `❌ Swap failed: ${error.message || 'Unknown error'}`
+        message: totalSwaps > 1 ? 
+          `❌ Swap ${currentSwap} of ${totalSwaps} failed: ${error.message || 'Unknown error'}` :
+          `❌ Swap failed: ${error.message || 'Unknown error'}`
       }));
       
       // Wait a bit to show error message
@@ -337,7 +366,10 @@ export function GroupCard({
       
       throw error;
     } finally {
-      setSwapProgress(prev => ({ ...prev, isVisible: false }));
+      // Only hide if this is the last swap or there's an error
+      if (swapProgress.status === 'error' || currentSwap === totalSwaps) {
+        setSwapProgress(prev => ({ ...prev, isVisible: false }));
+      }
     }
   };
 
@@ -396,10 +428,11 @@ export function GroupCard({
         console.log(`Available PYUSD: ${pyusdBalance.toFixed(2)}`);
 
         // Perform all swaps from PYUSD
-        for (const { token, amount } of tokensToSwap) {
+        for (let i = 0; i < tokensToSwap.length; i++) {
+          const { token, amount } = tokensToSwap[i];
           console.log(`🔄 Swapping PYUSD → ${amount.toFixed(6)} ${token}...`);
           
-          const swapSuccess = await performSwap('PYUSD', token, amount);
+          const swapSuccess = await performSwap('PYUSD', token, amount, i + 1, tokensToSwap.length);
 
           if (!swapSuccess) {
             toast({
@@ -416,7 +449,9 @@ export function GroupCard({
           });
 
           // Small delay between swaps
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          if (i < tokensToSwap.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
         }
 
         // All swaps complete, proceed with payment
@@ -486,8 +521,8 @@ export function GroupCard({
           }
         }
 
-        // Perform the swap on Sepolia
-        const swapSuccess = await performSwap(swapFrom, tokenNeededUpper, amountNeeded);
+        // Perform the swap on Sepolia (single swap)
+        const swapSuccess = await performSwap(swapFrom, tokenNeededUpper, amountNeeded, 1, 1);
 
         if (swapSuccess) {
           toast({
@@ -791,6 +826,16 @@ export function GroupCard({
                  swapProgress.status === 'switching' ? 'Switching Network' :
                  'Swapping on Sepolia'}
               </h3>
+              
+              {/* Show swap progress for multiple swaps */}
+              {swapProgress.totalSwaps > 1 && (
+                <div className="mb-2">
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                    Swap {swapProgress.currentSwap} of {swapProgress.totalSwaps}
+                  </Badge>
+                </div>
+              )}
+              
               <p className="text-sm text-gray-600">{swapProgress.message}</p>
             </div>
 
