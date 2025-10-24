@@ -411,7 +411,7 @@ export function GroupCard({
           icon: <ArrowRightLeft className="mr-2 h-4 w-4" />,
           disabled: false,
           onClick: handleSwapAndPay,
-          subtitle: `Need ${amount.toFixed(4)} ${token} (Swap on Sepolia)`
+          subtitle: `Need ${amount.toFixed(4)} ${token} `
         };
       } else {
         return {
@@ -500,7 +500,7 @@ export function GroupCard({
                         .filter(([_, amount]) => amount > 0)
                         .map(([token, amount]) => (
                           <div key={token}>
-                            Need {amount.toFixed(4)} {token} more (will swap on Sepolia)
+                            Need {amount.toFixed(4)} {token} more 
                           </div>
                         ))}
                     </div>
