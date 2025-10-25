@@ -16,6 +16,17 @@ A comprehensive Web3 payroll platform that revolutionizes how employers pay empl
 - **Complete Circular Flow**: Fiat → PYUSD → any crypto → PYUSD → fiat
 - **One-Click Consolidation**: Gather balances from multiple chains and swap to PYUSD for easy off-ramping
 
+### Advanced Transaction Tracking (Avail Intent Explorer)
+- **Complete Payment Trail**: BlockScout integration showing full journey from employer to employee
+- **Multi-Step Visibility**: Track deposits, conversions, and transfers with transaction hashes
+- **Audit Compliance**: Full traceability for accounting and regulatory purposes
+
+### One-Time Payment Links
+- **QR Code & Link Generation**: Create shareable payment links for ad-hoc transactions
+- **No Account Required**: Payers don't need employer accounts
+- **Flexible Options**: Pay with any available crypto, recipient receives preferred currency
+
+
 ### Employee Management
 - **Group-Based Organization**: Organize employees into payment groups for batch processing
 - **Flexible Configuration**: Custom payment amounts and token preferences per employee
@@ -27,16 +38,6 @@ A comprehensive Web3 payroll platform that revolutionizes how employers pay empl
 - **Gas Monitoring**: Automatic tracking of gas token balances across all active chains
 - **Proactive Alerts**: Notifications when gas falls below operational thresholds
 - **One-Click Refueling**: Simplified gas top-ups without manual bridge operations
-
-### Advanced Transaction Tracking
-- **Complete Payment Trail**: BlockScout integration showing full journey from employer to employee
-- **Multi-Step Visibility**: Track deposits, conversions, and transfers with transaction hashes
-- **Audit Compliance**: Full traceability for accounting and regulatory purposes
-
-### One-Time Payment Links
-- **QR Code & Link Generation**: Create shareable payment links for ad-hoc transactions
-- **No Account Required**: Payers don't need employer accounts
-- **Flexible Options**: Pay with any available crypto, recipient receives preferred currency
 
 ## 🛠 Tech Stack
 
