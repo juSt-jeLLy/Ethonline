@@ -189,11 +189,6 @@ Deploy to any static hosting service:
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🔗 Links
-
-- **Live Demo**: [Your Demo URL]
-- **Documentation**: [Your Docs URL]
-- **ETHGlobal Project**: [Your ETHGlobal URL]
 
 ## 📧 Contact
 
