@@ -6,9 +6,11 @@ A comprehensive Web3 payroll platform that revolutionizes how employers pay empl
 
 ### Multi-Chain Payment Flexibility with Intelligent Routing
 - **Dual Preference System**: Employees set primary and secondary payment preferences for token type and blockchain network
+- **Cross-Chain Cross-Token Transfers**: Since Avail's native transfer function doesn't support cross-chain cross-token transfers, we built custom smart contracts to enable ETH ↔ USDC swaps and facilitate multi-token swaps across different chains, expanding payment flexibility beyond Avail's native capabilities
 - **Intelligent Fee Optimization**: Automatic comparison of transaction fees between preferences, routing through the most cost-effective option
 - **Automatic Failsafe**: If primary preference fails, automatically retries on secondary preference
 - **Smart Fee Comparison**: Evaluates total costs including gas prices, swap fees, and bridge costs
+
 
 ### PYUSD Integration & Fiat On/Off-Ramp
 - **Accessible Onboarding**: Users without crypto can onramp directly using PayPal's PYUSD stablecoin
