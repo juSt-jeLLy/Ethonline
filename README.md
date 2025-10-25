@@ -118,6 +118,10 @@ src/
 
 ## 🏗 Technical Architecture
 
+
+![Technical Architecture](https://github.com/juSt-jeLLy/Ethonline/blob/pyusd/public/Screenshot%202025-10-25%20at%2011.51.47%E2%80%AFPM.png)
+
+
 ### Payment Flow Pipeline
 
 1. **Preference-Based Routing**: Employee preferences stored in Supabase with primary/secondary chain and token choices
