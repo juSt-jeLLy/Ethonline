@@ -118,6 +118,10 @@ src/
 
 ## 🏗 Technical Architecture
 
+
+![Technical Architecture](public/Screenshot 2025-10-25 at 11.51.47 PM.png)
+
+
 ### Payment Flow Pipeline
 
 1. **Preference-Based Routing**: Employee preferences stored in Supabase with primary/secondary chain and token choices
