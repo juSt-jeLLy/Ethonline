@@ -11,7 +11,7 @@ This document contains feedback, issues, and suggestions for the AVAIL team base
 ### Documentation Questions
 
 ### Issue 0: Confusion About Token Conversion in `transfer()` Function
-
+[Source](https://docs.availproject.org/nexus/avail-nexus-sdk/nexus-core/transfer)
 **Context:**  
 While testing the `transfer()` method of the Avail Nexus SDK, there was confusion about how token conversion actually works when sending assets cross-chain.
 
@@ -22,7 +22,7 @@ At the very top of the docs, the description says:
 This statement led me to believe that if I only had **ETH** on the source chain (e.g., **Sepolia**) and I wanted to receive **USDC** on the destination chain (e.g., **Base**), the SDK would automatically handle the conversion from **ETH → USDC** before bridging.
 
 ---
-[Source](https://docs.availproject.org/nexus/avail-nexus-sdk/nexus-core/transfer)
+
 
 
 **Example Code In Docs:**
