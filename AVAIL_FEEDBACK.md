@@ -80,33 +80,7 @@ The line “Convert selected tokens to USDC” should be revised to “Transfers
 
 Add a cross-reference to the XCS Swap (exactOut) section for developers looking to convert one token (e.g., ETH) into another (e.g., USDC) and transfer it in one step.
 
-### Issue 1: Question on Allowances and Order of Operations 
-```
-How Allowances Work?
-Here is how the allowances enables chain abstracted transactions:
-
-User approves the protocol to access funds from two or more source chains.
-Protocol unifies user balance across these chains.
-Unified funds go into protocol vaults.
-The protocol presents the user with an intent to transact on the destination along with amount and fee details.
-```
-
-When you say `unified funds go into protocol vaults` does the users wallet get emptied of a token type and put into protocol vaults?  Or is it just the amount of the transaction?  I was a bit confused because the default allowance is unlimited, I assume its just the transaction amount but wasn't 100% sure here.  I had some thoughts that maybe Avail Nexus became a full wallet custodian for a given wallet so that while the users funds were "SAFU" - Avail Nexus held the $ in numerous smart contracts such that they don't need to pay gas for the initial Payer->Nexus/Solver transfer.
-
-### Issue 1.1
-Do you have an easy way for users to revoke all allowances in the event of a security issue?  Or should each app provide that capability?  
-We did find a line of code: `//Revoke allowances await sdk.revokeAllowance(137, ['USDC']);` - I think some comment elsewhere about revokation would be useful.
-
-
-### Issue 2: Traceability and Error Handling of Transactions
-Right now its a bit cloudy on what happens with a TX in typical blockchain scenarios:
-2a) "Race Conditions" - after simulation is it gauranteed the liqudity is still there?
-   For Example, what if liquidty is gone because because between simulation and actual execution another TX happens?
-2b) Documenting what is atomic across the end to end TX process vs what is not is really essential for developers and corporate legal useage.
-2c) In Discord we were told if the Solver->Payee TX fails, the $ is sent back to the original sender shortly after.  This was not in the documentation, something very critical that needs to be added
-  2c..continued) What if between the time the Solver->Payee fail, liquidity drops below what is needed for a refund.  You should explain that user funds are locked in the code until the Solver->Payee TX is completed and can't be re-used for general liquidy immediately.... Is there a Smart Contract audit which shows this is scenario is covered/safe?  
-
-### Issue 3: Incorrect USDT Contract Addresses in SDK
+### Issue 1: Incorrect USDT Contract Addresses in SDK
 
 **Problem**: During development, we encountered a "Token not supported on this chain" error when trying to transfer USDT on Sepolia testnet.
 
@@ -124,6 +98,34 @@ Right now its a bit cloudy on what happens with a TX in typical blockchain scena
 **Resolution**: We reported this issue to the AVAIL team during the hackathon, and they promptly addressed it by merging a pull request that updated the incorrect USDT addresses across multiple testnets including Optimism Sepolia, Arbitrum Sepolia, and Monad Testnet.
 
 **Pull Request**: [availproject/nexus-sdk#49](https://github.com/availproject/nexus-sdk/pull/49/commits/ea8850d7240bede57e98f1c7b6283ec85e47c86d)
+
+### Issue 2: Question on Allowances and Order of Operations 
+```
+How Allowances Work?
+Here is how the allowances enables chain abstracted transactions:
+
+User approves the protocol to access funds from two or more source chains.
+Protocol unifies user balance across these chains.
+Unified funds go into protocol vaults.
+The protocol presents the user with an intent to transact on the destination along with amount and fee details.
+```
+
+When you say `unified funds go into protocol vaults` does the users wallet get emptied of a token type and put into protocol vaults?  Or is it just the amount of the transaction?  I was a bit confused because the default allowance is unlimited, I assume its just the transaction amount but wasn't 100% sure here.  I had some thoughts that maybe Avail Nexus became a full wallet custodian for a given wallet so that while the users funds were "SAFU" - Avail Nexus held the $ in numerous smart contracts such that they don't need to pay gas for the initial Payer->Nexus/Solver transfer.
+
+### Issue 2.1
+Do you have an easy way for users to revoke all allowances in the event of a security issue?  Or should each app provide that capability?  
+We did find a line of code: `//Revoke allowances await sdk.revokeAllowance(137, ['USDC']);` - I think some comment elsewhere about revokation would be useful.
+
+
+### Issue 3: Traceability and Error Handling of Transactions
+Right now its a bit cloudy on what happens with a TX in typical blockchain scenarios:
+2a) "Race Conditions" - after simulation is it gauranteed the liqudity is still there?
+   For Example, what if liquidty is gone because because between simulation and actual execution another TX happens?
+2b) Documenting what is atomic across the end to end TX process vs what is not is really essential for developers and corporate legal useage.
+2c) In Discord we were told if the Solver->Payee TX fails, the $ is sent back to the original sender shortly after.  This was not in the documentation, something very critical that needs to be added
+  2c..continued) What if between the time the Solver->Payee fail, liquidity drops below what is needed for a refund.  You should explain that user funds are locked in the code until the Solver->Payee TX is completed and can't be re-used for general liquidy immediately.... Is there a Smart Contract audit which shows this is scenario is covered/safe?  
+
+
 
 ### Issue 4: Where does it talk about simulation and details that will give us?
 
