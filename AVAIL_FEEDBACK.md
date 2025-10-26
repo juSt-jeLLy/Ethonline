@@ -85,7 +85,6 @@ Add a cross-reference to the XCS Swap (exactOut) section for developers looking 
 - Multiple token addresses in the constants file were outdated or pointing to EOA addresses
 
 **Evidence**: 
-- Screenshot shows transfer failing with "Token not supported on this chain" error
 - Comparison between SDK addresses and actual verified contract addresses on testnet explorers revealed discrepancies
 - The address `0x7F5c764cBc14f9669B88837ca1490cCa17c31607` shown in SDK didn't match the actual USDT deployments
 
