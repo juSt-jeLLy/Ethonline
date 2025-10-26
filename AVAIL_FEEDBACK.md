@@ -2,10 +2,6 @@
 
 This document contains feedback, issues, and suggestions for the AVAIL team based on our experience building PayStream - a Web3 payment management system.
 
-## Project Overview
-
-**Project**: PayStream - Web3 Payment Management System  
-**Use Case**: Employer-employee payment processing with cross-chain capabilities  
 **Framework**: AVAIL Framework with Nexus SDK integration  
 
 ### Documentation Questions
