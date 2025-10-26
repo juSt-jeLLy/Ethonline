@@ -22,7 +22,7 @@ At the very top of the docs, the description says:
 This statement led me to believe that if I only had **ETH** on the source chain (e.g., **Sepolia**) and I wanted to receive **USDC** on the destination chain (e.g., **Base**), the SDK would automatically handle the conversion from **ETH → USDC** before bridging.
 
 ---
-![Source]([https://github.com/juSt-jeLLy/Ethonline/blob/pyusd/public/Screenshot%202025-10-25%20at%2011.51.47%E2%80%AFPM.png](https://docs.availproject.org/nexus/avail-nexus-sdk/nexus-core/transfer))
+[Source](https://docs.availproject.org/nexus/avail-nexus-sdk/nexus-core/transfer))
 
 
 **Example Code In Docs:**
