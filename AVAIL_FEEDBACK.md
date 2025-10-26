@@ -130,3 +130,12 @@ Right now its a bit cloudy on what happens with a TX in typical blockchain scena
 - when I search for "Simulation" on docs.avail.org there is no mention of what details I'll get, how to use it, etc.
 <insert screen shot>
 - when I search for "simulation" on github, its only mentioned in code, not the docs.
+Issue 4: Missing Simulation Documentation and Handling Guidance
+
+there is no mention of what details/parameters the simulation returns, how to use the response object, or which fields are available (e.g., fees, gasSupplied, caRoutingFee, estimatedTime, route, etc.). Additionally, the documentation doesn't explain that simulations can fail even when the actual transfer/bridge function succeeds. Developers need clear guidance on:
+1. All available simulation response parameters and their structure
+2. How to extract and use specific fields from the simulation result
+3. Best practices for handling simulation failures (since they don't guarantee transaction failure)
+4. When to treat simulation as advisory vs. blocking
+
+This creates confusion as developers must console.log() the entire response object to discover available fields, and may incorrectly block transactions when simulations fail.
